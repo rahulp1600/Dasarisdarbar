@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: dasarisdarbar-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHON_OCR_URL
+        value: http://127.0.0.1:8000
+      - key: SUPABASE_URL
+        value: https://icnqjyhpvimbhfrcqzsl.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_kG-Q_3CdV06OLnPpyjLcNg_3PlguQTs
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

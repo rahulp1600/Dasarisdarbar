@@ -16,9 +16,14 @@ import pytesseract
 from datetime import datetime
 import numpy as np
 
-# Configure tesseract executable path on Windows
+import shutil
+
+# Configure tesseract executable path (Windows, Linux, Docker, Render, Fly.io)
 LOCAL_TESS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tesseract"))
 POSSIBLE_TESSERACT_PATHS = [
+    shutil.which("tesseract"),
+    "/usr/bin/tesseract",
+    "/usr/local/bin/tesseract",
     os.path.join(LOCAL_TESS_DIR, "tesseract.exe"),
     r"C:\Client\ocr-service\tesseract\tesseract.exe",
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -28,7 +33,7 @@ POSSIBLE_TESSERACT_PATHS = [
 ]
 
 for p in POSSIBLE_TESSERACT_PATHS:
-    if os.path.isfile(p):
+    if p and os.path.isfile(p):
         pytesseract.pytesseract.tesseract_cmd = p
         tessdata_dir = os.path.join(os.path.dirname(p), "tessdata")
         if os.path.isdir(tessdata_dir):
