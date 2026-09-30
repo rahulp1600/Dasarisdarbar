@@ -1,0 +1,905 @@
+{
+  "verified_bills": [
+    {
+      "id": "fad11c4b-3397-448b-9621-3e896de1c2aa",
+      "customer_id": "real_guest_test_01",
+      "bill_number": "12",
+      "bill_date": "2026-09-29",
+      "bill_amount": 320,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARIS DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 12\nDate: 29-09-2026\n1x Chicken Biryani Rs. 320.00\nGRAND TOTAL: Rs. 320.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|12|2026-09-29|320.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T03:32:47.502+00:00"
+    },
+    {
+      "id": "bc571aea-6abe-4ca3-bb4c-943082eafde7",
+      "customer_id": "cust_test1_1790703062580",
+      "bill_number": "66795",
+      "bill_date": "2026-09-29",
+      "bill_amount": 850,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 66795\nDate: 2026-09-29\n1x Chicken Dum Biryani Rs. 450.00\n1x Paneer Butter Masala Rs. 400.00\nGRAND TOTAL: Rs. 850.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|66795|2026-09-29|850.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:06.147+00:00"
+    },
+    {
+      "id": "74365bdd-5954-4dbf-b7e8-db3a635140de",
+      "customer_id": "cust_test2_1790703067000",
+      "bill_number": "66796",
+      "bill_date": "2026-09-29",
+      "bill_amount": 1200,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 66796\nDate: 2026-09-29\n1x Mutton Rogan Josh_ Rs. 650.00\n1x Butter Naan Basket Rs. 550.00\nGRAND TOTAL: Rs. 1200.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|66796|2026-09-29|1200.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:10.013+00:00"
+    },
+    {
+      "id": "50a4558b-f108-4915-b7aa-e4efc33eb27f",
+      "customer_id": "cust_test3_1790703071098",
+      "bill_number": "66797",
+      "bill_date": "2026-09-29",
+      "bill_amount": 2500,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 66797\nDate: 2026-09-29\n2x Special Darbar Feast Platter Rs. 2500.00\nGRAND TOTAL: Rs. 2500.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|66797|2026-09-29|2500.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:13.966+00:00"
+    },
+    {
+      "id": "01c11c12-4c39-4ee0-a0cd-0b1272e4059e",
+      "customer_id": "cust_noamt_1790703080205",
+      "bill_number": "66801",
+      "bill_date": "2026-09-29",
+      "bill_amount": 30,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 66801\nDate: 2026-09-29\n1x Mineral Water Rs. 30.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|66801|2026-09-29|30.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:22.189+00:00"
+    },
+    {
+      "id": "cb9314f4-9583-4c75-8e0f-b5d4763264ed",
+      "customer_id": "cust_test1_1790703106716",
+      "bill_number": "10853",
+      "bill_date": "2026-09-29",
+      "bill_amount": 850,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 10853\nDate: 2026-09-29\n1x Chicken Dum Biryani Rs. 450.00\n1x Paneer Butter Masala Rs. 400.00\nGRAND TOTAL: Rs. 850.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|10853|2026-09-29|850.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:49.873+00:00"
+    },
+    {
+      "id": "7208b48a-ffb0-4e24-a38c-403ce0f1d50d",
+      "customer_id": "cust_test2_1790703110593",
+      "bill_number": "10854",
+      "bill_date": "2026-09-29",
+      "bill_amount": 1200,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 10854\nDate: 2026-09-29\n1x Mutton Rogan Josh_ Rs. 650.00\n1x Butter Naan Basket Rs. 550.00\nGRAND TOTAL: Rs. 1200.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|10854|2026-09-29|1200.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:53.718+00:00"
+    },
+    {
+      "id": "8df79c2c-2014-4f61-aefb-686f2c571cde",
+      "customer_id": "cust_test3_1790703114569",
+      "bill_number": "10855",
+      "bill_date": "2026-09-29",
+      "bill_amount": 2500,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 10855\nDate: 2026-09-29\n2x Special Darbar Feast Platter Rs. 2500.00\nGRAND TOTAL: Rs. 2500.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|10855|2026-09-29|2500.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T17:31:57.89+00:00"
+    },
+    {
+      "id": "fce8a94e-c015-404b-8afe-650b2f72fee1",
+      "customer_id": "cust_test1_1790708010536",
+      "bill_number": "14770",
+      "bill_date": "2026-09-30",
+      "bill_amount": 850,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 14770\nDate: 2026-09-30\n1x Chicken Dum Biryani Rs. 450.00\n1x Paneer Butter Masala Rs. 400.00\nGRAND TOTAL: Rs. 850.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|14770|2026-09-30|850.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:53:33.753+00:00"
+    },
+    {
+      "id": "71a6fb92-d3e3-4e4f-8947-32d8fb0ea0b8",
+      "customer_id": "cust_test2_1790708014523",
+      "bill_number": "14771",
+      "bill_date": "2026-09-30",
+      "bill_amount": 1200,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 14771\nDate: 2026-09-30\n1x Mutton Rogan Josh_ Rs. 650.00\n1x Butter Naan Basket Rs. 550.00\nGRAND TOTAL: Rs. 1200.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|14771|2026-09-30|1200.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:53:37.487+00:00"
+    },
+    {
+      "id": "73754009-08f6-4d3b-8856-f644e2866e50",
+      "customer_id": "cust_test3_1790708018494",
+      "bill_number": "14772",
+      "bill_date": "2026-09-30",
+      "bill_amount": 2500,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 14772\nDate: 2026-09-30\n2x Special Darbar Feast Platter Rs. 2500.00\nGRAND TOTAL: Rs. 2500.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|14772|2026-09-30|2500.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:53:41.487+00:00"
+    },
+    {
+      "id": "ec689774-193a-45a9-8385-7258fcaf7f75",
+      "customer_id": "cust_test1_1790708054624",
+      "bill_number": "58854",
+      "bill_date": "2026-09-30",
+      "bill_amount": 850,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 58854\nDate: 2026-09-30\n1x Chicken Dum Biryani Rs. 450.00\n1x Paneer Butter Masala Rs. 400.00\nGRAND TOTAL: Rs. 850.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|58854|2026-09-30|850.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:54:17.704+00:00"
+    },
+    {
+      "id": "e437b200-f4ea-4839-8cfa-4b34cf24dd63",
+      "customer_id": "cust_test2_1790708058392",
+      "bill_number": "58855",
+      "bill_date": "2026-09-30",
+      "bill_amount": 1200,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 58855\nDate: 2026-09-30\n1x Mutton Rogan Josh_ Rs. 650.00\n1x Butter Naan Basket Rs. 550.00\nGRAND TOTAL: Rs. 1200.00",
+      "ocr_confidence": 0.97,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|58855|2026-09-30|1200.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:54:21.393+00:00"
+    },
+    {
+      "id": "c82659f3-ff21-44cf-acfa-c42f24177225",
+      "customer_id": "cust_test3_1790708062159",
+      "bill_number": "58856",
+      "bill_date": "2026-09-30",
+      "bill_amount": 2500,
+      "restaurant_name": "Dasari Darbar",
+      "ocr_raw_text": "DASARI DARBAR\nVeg & Non Veg Family Restaurant\nKothapet, Hyderabad\nBill No: 58856\nDate: 2026-09-30\n2x Special Darbar Feast Platter Rs. 2500.00\nGRAND TOTAL: Rs. 2500.00",
+      "ocr_confidence": 0.98,
+      "bill_image_reference": null,
+      "bill_fingerprint": "DASARIDARBAR|58856|2026-09-30|2500.00",
+      "verification_status": "verified",
+      "verification_reason": "Automated OCR & sequence validation passed",
+      "created_at": "2026-09-29T18:54:24.927+00:00"
+    }
+  ],
+  "loyalty_claims": [],
+  "loyalty_progress": {
+    "real_guest_test_01": {
+      "customer_id": "real_guest_test_01",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T03:32:47.997Z"
+    },
+    "cust_test2_1790702992755": {
+      "customer_id": "cust_test2_1790702992755",
+      "qualifying_visits_count": 4,
+      "total_visits_lifetime": 4,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    },
+    "cust_test3_1790702995135": {
+      "customer_id": "cust_test3_1790702995135",
+      "qualifying_visits_count": 3,
+      "total_visits_lifetime": 3,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    },
+    "cust_test1_1790703062580": {
+      "customer_id": "cust_test1_1790703062580",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T17:31:06.621Z"
+    },
+    "cust_test2_1790703067000": {
+      "customer_id": "cust_test2_1790703067000",
+      "qualifying_visits_count": 5,
+      "total_visits_lifetime": 5,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": true,
+      "updated_at": "2026-09-29T17:31:10.251Z"
+    },
+    "cust_test3_1790703071098": {
+      "customer_id": "cust_test3_1790703071098",
+      "qualifying_visits_count": 3,
+      "total_visits_lifetime": 3,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    },
+    "cust_noamt_1790703080205": {
+      "customer_id": "cust_noamt_1790703080205",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T17:31:22.479Z"
+    },
+    "cust_test1_1790703106716": {
+      "customer_id": "cust_test1_1790703106716",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T17:31:50.224Z"
+    },
+    "cust_test2_1790703110593": {
+      "customer_id": "cust_test2_1790703110593",
+      "qualifying_visits_count": 5,
+      "total_visits_lifetime": 5,
+      "last_visit_date": "2026-09-29",
+      "milestone_unlocked": true,
+      "updated_at": "2026-09-29T17:31:53.954Z"
+    },
+    "cust_test3_1790703114569": {
+      "customer_id": "cust_test3_1790703114569",
+      "qualifying_visits_count": 3,
+      "total_visits_lifetime": 3,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    },
+    "cust_test1_1790708010536": {
+      "customer_id": "cust_test1_1790708010536",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-30",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T18:53:34.181Z"
+    },
+    "cust_test2_1790708014523": {
+      "customer_id": "cust_test2_1790708014523",
+      "qualifying_visits_count": 5,
+      "total_visits_lifetime": 5,
+      "last_visit_date": "2026-09-30",
+      "milestone_unlocked": true,
+      "updated_at": "2026-09-29T18:53:37.920Z"
+    },
+    "cust_test3_1790708018494": {
+      "customer_id": "cust_test3_1790708018494",
+      "qualifying_visits_count": 3,
+      "total_visits_lifetime": 3,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    },
+    "cust_test1_1790708054624": {
+      "customer_id": "cust_test1_1790708054624",
+      "qualifying_visits_count": 1,
+      "total_visits_lifetime": 1,
+      "last_visit_date": "2026-09-30",
+      "milestone_unlocked": false,
+      "updated_at": "2026-09-29T18:54:18.082Z"
+    },
+    "cust_test2_1790708058392": {
+      "customer_id": "cust_test2_1790708058392",
+      "qualifying_visits_count": 5,
+      "total_visits_lifetime": 5,
+      "last_visit_date": "2026-09-30",
+      "milestone_unlocked": true,
+      "updated_at": "2026-09-29T18:54:21.613Z"
+    },
+    "cust_test3_1790708062159": {
+      "customer_id": "cust_test3_1790708062159",
+      "qualifying_visits_count": 3,
+      "total_visits_lifetime": 3,
+      "last_visit_date": "2026-09-20",
+      "milestone_unlocked": false
+    }
+  },
+  "loyalty_offers": [
+    {
+      "id": "offer_15_pct",
+      "title": "15% OFF",
+      "discount_type": "percentage_discount",
+      "value": "15%",
+      "discount_percent": 15,
+      "max_discount": 400,
+      "description": "15% instant discount on your family dining bill (Max ₹400).",
+      "active": true,
+      "expiry_days": 30
+    },
+    {
+      "id": "offer_10_pct",
+      "title": "10% OFF",
+      "discount_type": "percentage_discount",
+      "value": "10%",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your dining bill (Max ₹300).",
+      "active": true,
+      "expiry_days": 30
+    },
+    {
+      "id": "offer_free_dessert",
+      "title": "FREE DESSERT",
+      "discount_type": "free_item",
+      "value": "Dessert",
+      "discount_percent": null,
+      "max_discount": null,
+      "description": "Complimentary Double Ka Meetha or Apricot Delight with meal.",
+      "active": true,
+      "expiry_days": 30
+    },
+    {
+      "id": "offer_free_cooldrink",
+      "title": "FREE COOL DRINK",
+      "discount_type": "free_item",
+      "value": "Cool Drink",
+      "discount_percent": null,
+      "max_discount": null,
+      "description": "Complimentary chilled Goli Soda or beverage.",
+      "active": true,
+      "expiry_days": 30
+    }
+  ],
+  "customer_rewards": [
+    {
+      "id": "ffd8fc8d-51be-4f5d-87b8-00c2059f19ba",
+      "customer_id": "cust_test2_1790703067000",
+      "reward_type": "free_item",
+      "reward_name": "FREE DESSERT",
+      "reward_code": "DD-RW-86553",
+      "source_bill_id": "74365bdd-5954-4dbf-b7e8-db3a635140de",
+      "status": "available",
+      "discount_percent": 15,
+      "max_discount": 400,
+      "description": "Complimentary Double Ka Meetha or Apricot Delight with meal.",
+      "issued_date": "2026-09-29T17:31:10.372+00:00",
+      "expiry_date": "2026-10-29T17:31:10.372+00:00",
+      "redeemed_date": null,
+      "created_at": "2026-09-29T17:31:10.372+00:00"
+    },
+    {
+      "id": "88e4363b-08cc-439c-9664-45f8f24bc4c4",
+      "customer_id": "cust_test2_1790703110593",
+      "reward_type": "percentage_discount",
+      "reward_name": "15% OFF",
+      "reward_code": "DD-RW-56220",
+      "source_bill_id": "7208b48a-ffb0-4e24-a38c-403ce0f1d50d",
+      "status": "available",
+      "discount_percent": 15,
+      "max_discount": 400,
+      "description": "15% instant discount on your family dining bill (Max ₹400).",
+      "issued_date": "2026-09-29T17:31:54.087+00:00",
+      "expiry_date": "2026-10-29T17:31:54.087+00:00",
+      "redeemed_date": null,
+      "created_at": "2026-09-29T17:31:54.087+00:00"
+    },
+    {
+      "id": "409519d8-1d17-4a0e-a8a6-b2d58b34f942",
+      "customer_id": "cust_test2_1790708014523",
+      "reward_type": "percentage_discount",
+      "reward_name": "10% OFF",
+      "reward_code": "DD-RW-88048",
+      "source_bill_id": "71a6fb92-d3e3-4e4f-8947-32d8fb0ea0b8",
+      "status": "available",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your dining bill (Max ₹300).",
+      "issued_date": "2026-09-29T18:53:38.03+00:00",
+      "expiry_date": "2026-10-29T18:53:38.031+00:00",
+      "redeemed_date": null,
+      "created_at": "2026-09-29T18:53:38.031+00:00"
+    },
+    {
+      "id": "4f2c3ade-b96e-4601-b247-736554cc3f9c",
+      "customer_id": "cust_test2_1790708058392",
+      "reward_type": "free_item",
+      "reward_name": "FREE DESSERT",
+      "reward_code": "DD-RW-94390",
+      "source_bill_id": "e437b200-f4ea-4839-8cfa-4b34cf24dd63",
+      "status": "available",
+      "discount_percent": 15,
+      "max_discount": 400,
+      "description": "Complimentary Double Ka Meetha or Apricot Delight with meal.",
+      "issued_date": "2026-09-29T18:54:21.721+00:00",
+      "expiry_date": "2026-10-29T18:54:21.721+00:00",
+      "redeemed_date": null,
+      "created_at": "2026-09-29T18:54:21.721+00:00"
+    }
+  ],
+  "big_bill_coupons": [
+    {
+      "id": "d54f184f-f1e5-47ff-896d-1f0445dfd7d3",
+      "customer_id": "cust_test3_1790703071098",
+      "source_bill_id": "50a4558b-f108-4915-b7aa-e4efc33eb27f",
+      "coupon_code": "DD-BIG-15533",
+      "status": "redeemed",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.",
+      "counter_verification_notice": "Please show your original ₹2,000+ bill at the counter to redeem this offer.",
+      "issued_date": "2026-09-29T17:31:14.086Z",
+      "expiry_date": "2026-10-29T17:31:14.086Z",
+      "created_at": "2026-09-29T17:31:14.086Z",
+      "redeemed_date": "2026-09-29T17:31:14.934Z"
+    },
+    {
+      "id": "87a33fc2-78e6-4737-a99f-a0fbb7b0984d",
+      "customer_id": "cust_test3_1790703114569",
+      "source_bill_id": "8df79c2c-2014-4f61-aefb-686f2c571cde",
+      "coupon_code": "DD-BIG-80072",
+      "status": "redeemed",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.",
+      "counter_verification_notice": "Please show your original ₹2,000+ bill at the counter to redeem this offer.",
+      "issued_date": "2026-09-29T17:31:58.069Z",
+      "expiry_date": "2026-10-29T17:31:58.069Z",
+      "created_at": "2026-09-29T17:31:58.069Z",
+      "redeemed_date": "2026-09-29T17:31:59.265Z"
+    },
+    {
+      "id": "8fd73f2c-84f2-4f09-be1f-19d0064c2415",
+      "customer_id": "cust_test3_1790708018494",
+      "source_bill_id": "73754009-08f6-4d3b-8856-f644e2866e50",
+      "coupon_code": "DD-BIG-98526",
+      "status": "redeemed",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.",
+      "counter_verification_notice": "Please show your original ₹2,000+ bill at the counter to redeem this offer.",
+      "issued_date": "2026-09-29T18:53:41.625Z",
+      "expiry_date": "2026-10-29T18:53:41.625Z",
+      "created_at": "2026-09-29T18:53:41.625Z",
+      "redeemed_date": "2026-09-29T18:53:42.278Z"
+    },
+    {
+      "id": "c545892a-86dd-4d46-835d-8ef13e29d75b",
+      "customer_id": "cust_test3_1790708062159",
+      "source_bill_id": "c82659f3-ff21-44cf-acfa-c42f24177225",
+      "coupon_code": "DD-BIG-25286",
+      "status": "redeemed",
+      "discount_percent": 10,
+      "max_discount": 300,
+      "description": "10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.",
+      "counter_verification_notice": "Please show your original ₹2,000+ bill at the counter to redeem this offer.",
+      "issued_date": "2026-09-29T18:54:25.032Z",
+      "expiry_date": "2026-10-29T18:54:25.032Z",
+      "created_at": "2026-09-29T18:54:25.032Z",
+      "redeemed_date": "2026-09-29T18:54:25.725Z"
+    }
+  ],
+  "redemptions": [
+    {
+      "id": "495a37ca-657c-488d-83c8-1e742f0cc7a4",
+      "customer_id": "cust_test3_1790703071098",
+      "reward_id": "d54f184f-f1e5-47ff-896d-1f0445dfd7d3",
+      "reward_type": "big_bill_coupon",
+      "voucher_code": "DD-BIG-15533",
+      "staff_identifier": "Staff Cashier [Physical Bill Verified at Counter]",
+      "redeemed_at": "2026-09-29T17:31:14.934Z",
+      "staff_verified": true
+    },
+    {
+      "id": "80847c9a-2c77-474e-8757-50f57f00a717",
+      "customer_id": "cust_test3_1790703114569",
+      "reward_id": "87a33fc2-78e6-4737-a99f-a0fbb7b0984d",
+      "reward_type": "big_bill_coupon",
+      "voucher_code": "DD-BIG-80072",
+      "staff_identifier": "Staff Cashier [Physical Bill Verified at Counter]",
+      "redeemed_at": "2026-09-29T17:31:59.265Z",
+      "staff_verified": true
+    },
+    {
+      "id": "b7fb83af-1efe-478c-a021-2551faa1a68c",
+      "customer_id": "cust_test3_1790708018494",
+      "reward_id": "8fd73f2c-84f2-4f09-be1f-19d0064c2415",
+      "reward_type": "big_bill_coupon",
+      "voucher_code": "DD-BIG-98526",
+      "staff_identifier": "Staff Cashier [Physical Bill Verified at Counter]",
+      "redeemed_at": "2026-09-29T18:53:42.278Z",
+      "staff_verified": true
+    },
+    {
+      "id": "f1450c70-59cc-41fd-b7a2-db33e2232b57",
+      "customer_id": "cust_test3_1790708062159",
+      "reward_id": "c545892a-86dd-4d46-835d-8ef13e29d75b",
+      "reward_type": "big_bill_coupon",
+      "voucher_code": "DD-BIG-25286",
+      "staff_identifier": "Staff Cashier [Physical Bill Verified at Counter]",
+      "redeemed_at": "2026-09-29T18:54:25.725Z",
+      "staff_verified": true
+    }
+  ],
+  "admin_audit_logs": [
+    {
+      "id": "da54e53b-014c-418c-bd80-324c6d3eb7b3",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "real_guest_test_01",
+      "target_record_type": "verified_bills",
+      "target_record_id": "fad11c4b-3397-448b-9621-3e896de1c2aa",
+      "details": {
+        "billNumber": "12",
+        "amount": 320,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T03:32:48.179Z"
+    },
+    {
+      "id": "b07e45b8-954b-494a-b499-387fa3d8467b",
+      "action_type": "DAILY_SEQUENCE_CONFIGURED",
+      "actor_id": "Dasaris_Darbar",
+      "target_record_type": "daily_sequence_configs",
+      "target_record_id": "2026-09-29",
+      "details": {
+        "businessDate": "2026-09-29",
+        "firstBillNumber": 91531,
+        "configuredBy": "Dasaris_Darbar"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:29:48.015Z"
+    },
+    {
+      "id": "18a2df82-2355-4f8c-bb14-89aa74dc2871",
+      "action_type": "DAILY_SEQUENCE_CONFIGURED",
+      "actor_id": "Dasaris_Darbar",
+      "target_record_type": "daily_sequence_configs",
+      "target_record_id": "2026-09-29",
+      "details": {
+        "businessDate": "2026-09-29",
+        "firstBillNumber": 66794,
+        "configuredBy": "Dasaris_Darbar"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:02.375Z"
+    },
+    {
+      "id": "bec7bb87-01bd-4fc9-8b8d-cd4817af3cd9",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "cust_test1_1790703062580",
+      "target_record_type": "verified_bills",
+      "target_record_id": "bc571aea-6abe-4ca3-bb4c-943082eafde7",
+      "details": {
+        "billNumber": "66795",
+        "amount": 850,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:06.870Z"
+    },
+    {
+      "id": "0b123329-c9d8-4585-a624-9820589656c2",
+      "action_type": "MILESTONE_REWARD_ISSUED",
+      "actor_id": "cust_test2_1790703067000",
+      "target_record_type": "verified_bills",
+      "target_record_id": "74365bdd-5954-4dbf-b7e8-db3a635140de",
+      "details": {
+        "billNumber": "66796",
+        "amount": 1200,
+        "newStreak": 5,
+        "rewardGenerated": "FREE DESSERT"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:10.922Z"
+    },
+    {
+      "id": "f0337b17-5256-4f2b-970f-336a46fa9232",
+      "action_type": "BIG_BILL_COUPON_ISSUED",
+      "actor_id": "cust_test3_1790703071098",
+      "target_record_type": "big_bill_coupons",
+      "target_record_id": "d54f184f-f1e5-47ff-896d-1f0445dfd7d3",
+      "details": {
+        "billNumber": "66797",
+        "amount": 2500,
+        "newStreak": 3,
+        "couponCode": "DD-BIG-15533"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:14.590Z"
+    },
+    {
+      "id": "7b8edc42-9a45-44ac-a27c-df5a363847bd",
+      "action_type": "VOUCHER_REDEEMED",
+      "actor_id": "Staff Cashier [Physical Bill Verified at Counter]",
+      "target_record_type": "big_bill_coupon",
+      "target_record_id": "d54f184f-f1e5-47ff-896d-1f0445dfd7d3",
+      "details": {
+        "voucherCode": "DD-BIG-15533",
+        "rewardName": "10% Big Bill Discount",
+        "customerId": "cust_test3_1790703071098",
+        "streakReset": false
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:15.187Z"
+    },
+    {
+      "id": "0edb1b9f-10c0-4b33-b1b8-4eea321a6104",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "cust_noamt_1790703080205",
+      "target_record_type": "verified_bills",
+      "target_record_id": "01c11c12-4c39-4ee0-a0cd-0b1272e4059e",
+      "details": {
+        "billNumber": "66801",
+        "amount": 30,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:22.924Z"
+    },
+    {
+      "id": "7e43a562-dc83-4ea8-bfdd-b8c4cb05d512",
+      "action_type": "DAILY_SEQUENCE_CONFIGURED",
+      "actor_id": "Dasaris_Darbar",
+      "target_record_type": "daily_sequence_configs",
+      "target_record_id": "2026-09-29",
+      "details": {
+        "businessDate": "2026-09-29",
+        "firstBillNumber": 10852,
+        "configuredBy": "Dasaris_Darbar"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:46.419Z"
+    },
+    {
+      "id": "d31495c0-4835-4e79-8569-f308b06c6476",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "cust_test1_1790703106716",
+      "target_record_type": "verified_bills",
+      "target_record_id": "cb9314f4-9583-4c75-8e0f-b5d4763264ed",
+      "details": {
+        "billNumber": "10853",
+        "amount": 850,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:50.457Z"
+    },
+    {
+      "id": "79fb7367-4d52-4be3-b4ee-18f381f8234d",
+      "action_type": "MILESTONE_REWARD_ISSUED",
+      "actor_id": "cust_test2_1790703110593",
+      "target_record_type": "verified_bills",
+      "target_record_id": "7208b48a-ffb0-4e24-a38c-403ce0f1d50d",
+      "details": {
+        "billNumber": "10854",
+        "amount": 1200,
+        "newStreak": 5,
+        "rewardGenerated": "15% OFF"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:54.436Z"
+    },
+    {
+      "id": "e35abecf-04e1-40a3-85df-d361de4a578a",
+      "action_type": "BIG_BILL_COUPON_ISSUED",
+      "actor_id": "cust_test3_1790703114569",
+      "target_record_type": "big_bill_coupons",
+      "target_record_id": "87a33fc2-78e6-4737-a99f-a0fbb7b0984d",
+      "details": {
+        "billNumber": "10855",
+        "amount": 2500,
+        "newStreak": 3,
+        "couponCode": "DD-BIG-80072"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:58.753Z"
+    },
+    {
+      "id": "f007c656-d9ac-4afa-851c-48da444533ae",
+      "action_type": "VOUCHER_REDEEMED",
+      "actor_id": "Staff Cashier [Physical Bill Verified at Counter]",
+      "target_record_type": "big_bill_coupon",
+      "target_record_id": "87a33fc2-78e6-4737-a99f-a0fbb7b0984d",
+      "details": {
+        "voucherCode": "DD-BIG-80072",
+        "rewardName": "10% Big Bill Discount",
+        "customerId": "cust_test3_1790703114569",
+        "streakReset": false
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T17:31:59.558Z"
+    },
+    {
+      "id": "3c48b891-8eb3-4f4e-84ae-964fca4a1415",
+      "action_type": "DAILY_SEQUENCE_CONFIGURED",
+      "actor_id": "Dasaris_Darbar",
+      "target_record_type": "daily_sequence_configs",
+      "target_record_id": "2026-09-30",
+      "details": {
+        "businessDate": "2026-09-30",
+        "firstBillNumber": 14769,
+        "configuredBy": "Dasaris_Darbar"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:53:30.337Z"
+    },
+    {
+      "id": "5f7c73b4-90b2-4701-8bed-d0fd4ee78f31",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "cust_test1_1790708010536",
+      "target_record_type": "verified_bills",
+      "target_record_id": "fce8a94e-c015-404b-8afe-650b2f72fee1",
+      "details": {
+        "billNumber": "14770",
+        "amount": 850,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:53:34.415Z"
+    },
+    {
+      "id": "375b2279-3872-4020-b176-51f2f5c8a2e0",
+      "action_type": "MILESTONE_REWARD_ISSUED",
+      "actor_id": "cust_test2_1790708014523",
+      "target_record_type": "verified_bills",
+      "target_record_id": "71a6fb92-d3e3-4e4f-8947-32d8fb0ea0b8",
+      "details": {
+        "billNumber": "14771",
+        "amount": 1200,
+        "newStreak": 5,
+        "rewardGenerated": "10% OFF"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:53:38.358Z"
+    },
+    {
+      "id": "8a4b8648-7adf-4bda-b5bf-83cfcde9663d",
+      "action_type": "BIG_BILL_COUPON_ISSUED",
+      "actor_id": "cust_test3_1790708018494",
+      "target_record_type": "big_bill_coupons",
+      "target_record_id": "8fd73f2c-84f2-4f09-be1f-19d0064c2415",
+      "details": {
+        "billNumber": "14772",
+        "amount": 2500,
+        "newStreak": 3,
+        "couponCode": "DD-BIG-98526"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:53:41.950Z"
+    },
+    {
+      "id": "cc471b19-f44f-4d15-a19e-dd659f6808e5",
+      "action_type": "VOUCHER_REDEEMED",
+      "actor_id": "Staff Cashier [Physical Bill Verified at Counter]",
+      "target_record_type": "big_bill_coupon",
+      "target_record_id": "8fd73f2c-84f2-4f09-be1f-19d0064c2415",
+      "details": {
+        "voucherCode": "DD-BIG-98526",
+        "rewardName": "10% Big Bill Discount",
+        "customerId": "cust_test3_1790708018494",
+        "streakReset": false
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:53:42.491Z"
+    },
+    {
+      "id": "40b84a49-60ff-4225-b2ba-85f00cb7e893",
+      "action_type": "DAILY_SEQUENCE_CONFIGURED",
+      "actor_id": "Dasaris_Darbar",
+      "target_record_type": "daily_sequence_configs",
+      "target_record_id": "2026-09-30",
+      "details": {
+        "businessDate": "2026-09-30",
+        "firstBillNumber": 58853,
+        "configuredBy": "Dasaris_Darbar"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:54:14.427Z"
+    },
+    {
+      "id": "4242058d-9465-442f-b511-60fc4f52ae67",
+      "action_type": "VISIT_RECORDED",
+      "actor_id": "cust_test1_1790708054624",
+      "target_record_type": "verified_bills",
+      "target_record_id": "ec689774-193a-45a9-8385-7258fcaf7f75",
+      "details": {
+        "billNumber": "58854",
+        "amount": 850,
+        "newStreak": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:54:18.284Z"
+    },
+    {
+      "id": "1947fcf3-c2b6-438d-85c6-84aad5562381",
+      "action_type": "MILESTONE_REWARD_ISSUED",
+      "actor_id": "cust_test2_1790708058392",
+      "target_record_type": "verified_bills",
+      "target_record_id": "e437b200-f4ea-4839-8cfa-4b34cf24dd63",
+      "details": {
+        "billNumber": "58855",
+        "amount": 1200,
+        "newStreak": 5,
+        "rewardGenerated": "FREE DESSERT"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:54:22.040Z"
+    },
+    {
+      "id": "ae1485a4-3726-4378-8dc1-010cee581965",
+      "action_type": "BIG_BILL_COUPON_ISSUED",
+      "actor_id": "cust_test3_1790708062159",
+      "target_record_type": "big_bill_coupons",
+      "target_record_id": "c545892a-86dd-4d46-835d-8ef13e29d75b",
+      "details": {
+        "billNumber": "58856",
+        "amount": 2500,
+        "newStreak": 3,
+        "couponCode": "DD-BIG-25286"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:54:25.386Z"
+    },
+    {
+      "id": "3493c2c6-e8af-41c7-8c66-0d22dc5315af",
+      "action_type": "VOUCHER_REDEEMED",
+      "actor_id": "Staff Cashier [Physical Bill Verified at Counter]",
+      "target_record_type": "big_bill_coupon",
+      "target_record_id": "c545892a-86dd-4d46-835d-8ef13e29d75b",
+      "details": {
+        "voucherCode": "DD-BIG-25286",
+        "rewardName": "10% Big Bill Discount",
+        "customerId": "cust_test3_1790708062159",
+        "streakReset": false
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-09-29T18:54:25.940Z"
+    }
+  ],
+  "daily_sequence_configs": {
+    "2026-09-29": {
+      "business_date": "2026-09-29",
+      "first_bill_number": 10852,
+      "configured_by": "Dasaris_Darbar",
+      "updated_at": "2026-09-29T17:31:46.247Z"
+    },
+    "2026-09-30": {
+      "business_date": "2026-09-30",
+      "first_bill_number": 58853,
+      "configured_by": "Dasaris_Darbar",
+      "updated_at": "2026-09-29T18:54:14.133Z"
+    }
+  }
+}

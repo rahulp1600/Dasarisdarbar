@@ -1,0 +1,317 @@
+DASARI'S DARBAR
+Website + Admin System — Build Plan
+Prepared as the working reference for building the real site and admin panel (Antigravity build, Supabase backend). Covers what's being built, the database, feature scope, and a phase-by-phase build order with test checklists for each phase — with extra depth on the loyalty system and the admin panel.
+1. What We're Building
+A customer-facing restaurant website for Dasari's Darbar (menu, ordering links, QR table-menu, dine-in booking, loyalty program).
+A single-owner admin panel to manage the menu, customers/visits, loyalty offers, dine-in offers, and bookings.
+A shared Supabase database + auth behind both.
+Dine-in booking uses a WhatsApp click-to-chat redirect (wa.me link) — no Meta Business API needed.
+Design direction (colors, layout, tone) is locked from the approved PDF mockup — white base, green section breaks, gold + red brand accents.
+2. System Architecture
+Frontend: built in Antigravity (by Rahul).
+Backend/DB: Supabase (Postgres + Auth).
+Customer loyalty login: Google sign-in via Supabase Auth.
+Admin login: single owner account, email/password via Supabase Auth.
+WhatsApp: click-to-chat link only (https://wa.me/<number>?text=...), triggered after a booking form submit.
+3. Design System (from the approved mockup)
+Exact values pulled from the approved PDF mockup, so Antigravity builds pixel-consistent with what the client signed off on.
+Color Palette
+Table: Colors
+Column
+Type
+Notes
+Deep Green
+#06452D
+Primary section background (green pages)
+Bright Green
+#0B5B3B
+Headlines, nav active state, secondary accents, outline-button text
+Brand Red
+#A5262A
+Primary CTA buttons, badges (Must Try / Bestseller)
+Gold (on green)
+#E4C47D
+Prices, labels, accents on dark green backgrounds
+Gold (on white)
+#B87919
+Eyebrow labels, small caps accents on white/cream backgrounds
+Cream
+#FBF8F1
+Soft section background on white pages (hero panel, cards)
+Ink
+#24221E
+Primary body text
+Muted Grey
+#6F6A61
+Secondary/supporting text
+White
+#FFFFFF
+Base page background
+Typography
+Headlines / section titles: bold geometric sans-serif, tight tracking — Poppins Bold or Montserrat Bold (Inter Bold as a safe fallback).
+Eyebrows / nav / labels: same sans family, small size, uppercase, letter-spaced.
+Body copy: regular weight sans-serif, comfortable line-height — Inter or Roboto (or system-ui stack for performance).
+Keep it to this one sans family across the whole site — the mockup deliberately uses a clean, simple type system rather than a decorative/serif one.
+Visual Language — “Simple, Aesthetic, 3D” Direction
+Rahul's brief for the real build: keep it simple and clean like the mockup, but give it a more premium, tactile feel with subtle depth — not flat/2D throughout.
+Keep the base layout minimal and uncluttered exactly like the mockup — depth should feel intentional, not decorate every element.
+Soft, multi-layer shadows (not harsh drop-shadows) on cards, buttons, and the phone/QR mockup — gives a gentle “floating” elevation.
+Consistent rounded corners (16–24px radius) across cards, buttons, and images for a soft premium feel.
+Buttons: subtle gradient fill + a gentle lift/shadow increase on hover, instead of flat solid color with no feedback.
+Once real food photography replaces the placeholders, give photos rounded corners + a soft ambient shadow so they read as “floating” cards over the background.
+QR / phone mockup: real device-style shadow and a subtle bezel highlight so it feels tactile and tappable, not a flat rectangle.
+Icons: prefer soft 3D / clay-style or duotone icons in the brand colors over plain flat line icons — use sparingly (nav, highlight strip, category icons).
+One bold visual moment per page, everything else calm — generous white space, a single accent color doing the work per section, matching the restraint already in the mockup.
+4. Database Schema (Supabase)
+Table: menu_items
+Column
+Type
+Notes
+id
+uuid, PK
+auto-generated
+category
+text
+starters / mandi / pulavs / mains / desserts
+name
+text
+description
+text
+optional
+price
+numeric
+nullable = “price on request”
+tag
+text
+must_try / bestseller / popular / null
+is_veg
+boolean
+is_available
+boolean
+admin toggle, hides item from site
+sort_order
+int
+controls display order
+Table: customers
+Column
+Type
+Notes
+id
+uuid, PK
+google_uid
+text, unique
+from Google sign-in
+name
+text
+phone
+text
+optional
+Table: visits
+Column
+Type
+Notes
+id
+uuid, PK
+customer_id
+uuid, FK
+references customers
+bill_number
+text
+entered by customer
+bill_amount
+numeric
+track
+text
+under_2000 / over_2000
+verified
+boolean
+admin/staff confirms the bill is real
+visit_date
+timestamptz
+Table: loyalty_offers
+Column
+Type
+Notes
+id
+uuid, PK
+title
+text
+e.g. “10% off”, “1 Free Biryani”
+track
+text
+track1 / track2
+discount_type
+text
+percent / free_item
+value
+text
+10, 15, biryani, dessert
+active
+boolean
+deactivated offers hide from customers
+Table: redemptions
+Column
+Type
+Notes
+id
+uuid, PK
+customer_id
+uuid, FK
+offer_id
+uuid, FK
+redeemed_at
+timestamptz
+staff_verified
+boolean
+staff confirmed at the table
+Table: dine_in_offers
+Column
+Type
+Notes
+id
+uuid, PK
+title
+text
+description
+text
+valid_from / valid_to
+date
+active date range
+active
+boolean
+Table: bookings
+Column
+Type
+Notes
+id
+uuid, PK
+name / phone
+text
+from booking form
+party_size
+int
+booking_date / booking_time
+date / time
+notes
+text
+optional
+status
+text
+pending / confirmed / cancelled
+4. Loyalty System Logic (recap)
+Track 1 — Visit streak (bills under ₹2000)
+Boundary rule: amount < ₹2000 → Track 1. Amount ≥ ₹2000 → Track 2.
+Customer logs in, enters bill number after paying → logged as a visit with track = under_2000.
+5 such visits (since the last redemption) = streak complete.
+On the 6th visit, customer can claim a reward before paying (staff verifies, applies it).
+After redemption, the streak resets to 0 and starts counting again.
+Reward options: 10% off, 15% off, 1 free biryani, 1 free dessert.
+Track 2 — Big bill (₹2000+)
+Any bill ₹2000 or more gets its own instant discount coupon, every time.
+Track 2 visits are logged but do NOT count toward the Track 1 streak.
+Known open edge case (not being built yet)
+Multiple people from the same group visiting separately the same day and each getting a coupon, but only one being applied — left unresolved for now.
+5. Feature Scope
+Customer-facing site
+Home — hero, highlights (timings, location, order links, QR)
+Menu — by category, pulled live from menu_items
+Loyalty — explains both tracks, shows the customer's own streak once logged in
+Dine-In booking — form → saves to bookings → redirects to WhatsApp
+Visit Us — address, map, timings, socials
+Admin panel (single owner login)
+Menu management — add/edit/delete items, toggle availability, reorder
+Customers & Visits — search customers, view visit history, verify bill numbers, see live streak count
+Loyalty Offers — create/edit/deactivate Track 1 rewards and the Track 2 discount
+Dine-In Offers — create/edit/deactivate promos with a valid date range
+Bookings — view submissions, update status (pending/confirmed/cancelled)
+6. Development Phases — Build & Test
+Each phase should be fully tested before moving to the next — loyalty and admin phases especially, since they carry real discount logic.
+PHASE 0  ·  Project Setup
+Build
+Create Supabase project, all 7 tables above, enable Google auth + email/password auth.
+Test
+All tables created with correct columns/types.
+Can sign up/log in with Google (customer side) and email/password (admin side) in a test environment.
+PHASE 1  ·  Public Menu Page
+Build
+Menu page reads from menu_items, grouped by category, respecting sort_order and is_available.
+Test
+Item added in Supabase directly shows up correctly on the page.
+Setting is_available = false hides the item from the public page.
+Items with no price show “price on request” instead of blank/₹0.
+PHASE 2  ·  Admin — Menu Management
+Build
+Admin login (owner only). Menu CRUD screen: add/edit/delete, toggle availability, drag/set sort order.
+Test
+Only the owner login can reach /admin — logged-out or wrong credentials are blocked.
+Adding an item in admin appears on the public menu without a manual refresh of the DB.
+Editing price/description updates immediately on the public side.
+Deleting an item removes it from the public menu.
+PHASE 3  ·  Customer Loyalty Signup & Login
+Build
+Google sign-in creates/links a row in customers via google_uid.
+Test
+New Google account creates exactly one customers row (no duplicates on repeat login).
+Logging out and back in returns the same customer record, not a new one.
+PHASE 4  ·  Loyalty — Visit Logging
+Build
+Logged-in customer enters a bill number + amount → creates a visits row with the correct track (under_2000 / over_2000).
+Test
+Bill amount ₹1999 → track = under_2000. Bill amount ₹2000 or more → track = over_2000.
+Same bill number can't be entered twice by the same or a different customer (prevent duplicate/fraudulent claims).
+Visit correctly attaches to the logged-in customer, not anonymous.
+PHASE 5  ·  Admin — Customers & Visits
+Build
+Admin screen listing customers, their visit history, a running Track-1 streak count, and a “verify” action per visit.
+Test
+Streak count only increases for verified, under_2000 visits.
+Streak shows 5/5 only after exactly 5 qualifying visits since the last redemption — not before, not after a 6th unredeemed visit keeps climbing incorrectly.
+Marking a visit unverified/rejected does not count toward the streak.
+PHASE 6  ·  Admin — Loyalty Offers
+Build
+CRUD screen for loyalty_offers — create/edit/deactivate Track 1 rewards and the Track 2 discount value.
+Test
+Deactivating an offer immediately removes it from what the customer can claim, without deleting past redemption history.
+Editing an offer's value (e.g. 10% → 12%) only affects future redemptions, not past ones.
+At least one active Track 1 offer and one active Track 2 offer always required — admin gets a warning if none are active.
+PHASE 7  ·  Reward Claim & Redemption
+Build
+Customer with a completed streak (5/5) or a Track-2-qualifying visit can claim a coupon; staff verifies and marks it redeemed.
+Test
+Reward option only appears when streak is genuinely 5/5, or the current visit is over_2000 — never earlier.
+Redeeming a Track 1 reward resets that customer's streak to 0.
+Track 2 redemption does NOT reset or touch the Track 1 streak.
+A redeemed coupon can't be redeemed a second time.
+Staff-side verification screen (or admin) can confirm/apply the coupon at the table.
+PHASE 8  ·  Dine-In Offers
+Build
+Admin CRUD for dine_in_offers; public site displays only currently-active offers (within valid_from/valid_to).
+Test
+Offer outside its date range does not show on the public site.
+Deactivating an offer removes it immediately.
+PHASE 9  ·  Dine-In Booking → WhatsApp
+Build
+Booking form (name, phone, party size, date, time, notes) → saves to bookings → redirects to wa.me with a pre-filled message.
+Test
+Submitting the form creates a bookings row with status = pending.
+WhatsApp opens (mobile and desktop) with all fields correctly filled in the message — no missing/garbled text from special characters.
+Booking appears in the admin Bookings list right after submission.
+Admin can change status to confirmed/cancelled and it's reflected correctly.
+PHASE 10  ·  QR Table Menu
+Build
+QR code printed for tables links directly to the public menu page (mobile-first view).
+Test
+Scanning on a real phone opens the menu directly, no login wall, loads fast on mobile data.
+PHASE 11  ·  Full Pass — Cross-Device & Polish
+Build
+Responsive check across mobile/tablet/desktop; final visual polish to match the approved mockup.
+Test
+Full loyalty cycle end-to-end on a real phone: sign up → 5 visits → claim reward → streak resets → starts again.
+Full admin cycle end-to-end: add menu item → create loyalty offer → verify a visit → process a booking.
+PHASE 12  ·  Client Review & Handoff
+Build
+Walk the client through the live site and admin panel; hand off login credentials.
+Test
+Client can log into admin independently and complete one full task (e.g. add a menu item) unassisted.
+7. Open Items Before Building
+Restaurant's WhatsApp number for the wa.me booking link.
