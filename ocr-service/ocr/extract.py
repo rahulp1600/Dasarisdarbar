@@ -223,18 +223,23 @@ def extract_structured_bill(image_variants: dict) -> dict:
     confidences = []
 
     try:
-        # 1. Get structured text lines directly from image_to_string
-        raw_text = pytesseract.image_to_string(primary_img, config=custom_config)
-
-        # 2. Get word confidences
+        # High-speed single-pass Tesseract: image_to_data extracts text lines and confidences together
         data = pytesseract.image_to_data(primary_img, config=custom_config, output_type=pytesseract.Output.DICT)
-        for conf in data.get("conf", []):
+        words_by_line = {}
+        n_boxes = len(data.get("text", []))
+        for i in range(n_boxes):
+            word = data["text"][i].strip()
             try:
-                c = float(conf)
+                c = float(data["conf"][i])
                 if c >= 0:
                     confidences.append(c)
             except (ValueError, TypeError):
                 pass
+            if word:
+                line_idx = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+                words_by_line.setdefault(line_idx, []).append(word)
+
+        raw_text = "\n".join(" ".join(words) for words in words_by_line.values())
 
         # If primary yielded very little text, fallback to enhanced grayscale
         if len(raw_text.strip()) < 25 and gray_img is not None:
