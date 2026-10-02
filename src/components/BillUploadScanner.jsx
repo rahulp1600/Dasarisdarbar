@@ -7,6 +7,112 @@ import loyaltyEngine from '../services/loyaltyEngine';
 import backendApi from '../services/backendApi';
 import { scanReceiptWithTesseract } from '../services/ocrService';
 
+/**
+ * Optimizes bill images client-side before uploading:
+ * - Checks file type, size, and natural dimensions
+ * - If dimension > 1600px or size > 800KB, resizes on HTML5 Canvas maintaining aspect ratio
+ * - Quality ~0.82 JPEG
+ * - Preserves small files as-is
+ * - Measures and reports actual duration (no hard pass/fail threshold)
+ * - Graceful fallback on any canvas/reader error
+ */
+export async function optimizeImageForOcr(file) {
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (!file || !file.type || !file.type.startsWith('image/')) {
+    return { file, base64: null, durationMs: 0, optimized: false };
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 1600;
+        let { width, height } = img;
+
+        // If already within bounds (<= 1600px both sides) and file size < 800KB, preserve original
+        if (width <= MAX_DIM && height <= MAX_DIM && file.size < 800 * 1024) {
+          const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          const durationMs = Math.round(t1 - t0);
+          console.log(`[OCR Client] Image already optimal (${width}x${height}, ${Math.round(file.size / 1024)}KB). Preserved as-is in ${durationMs}ms.`);
+          return resolve({ file, base64: dataUrl, durationMs, optimized: false, width, height });
+        }
+
+        // Calculate proportional scale maintaining aspect ratio
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            return resolve({ file, base64: dataUrl, durationMs: Math.round(t1 - t0), optimized: false });
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+
+          canvas.toBlob(
+            (blob) => {
+              const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+              const durationMs = Math.round(t1 - t0);
+              if (!blob) {
+                return resolve({ file, base64: optimizedBase64, durationMs, optimized: false });
+              }
+              const cleanName = (file.name || 'receipt').replace(/\.[^/.]+$/, "") + ".jpg";
+              const optimizedFile = new File([blob], cleanName, {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              console.log(`[OCR Client] Image optimized: ${img.naturalWidth}x${img.naturalHeight} (${Math.round(file.size / 1024)}KB) -> ${width}x${height} (${Math.round(optimizedFile.size / 1024)}KB) in ${durationMs}ms.`);
+              resolve({
+                file: optimizedFile,
+                base64: optimizedBase64,
+                durationMs,
+                optimized: true,
+                origSize: file.size,
+                newSize: optimizedFile.size,
+                width,
+                height
+              });
+            },
+            'image/jpeg',
+            0.82
+          );
+        } catch (canvasErr) {
+          console.warn('[OCR Client] Canvas resize fallback:', canvasErr);
+          const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          resolve({ file, base64: dataUrl, durationMs: Math.round(t1 - t0), optimized: false });
+        }
+      };
+      img.onerror = () => {
+        const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        resolve({ file, base64: dataUrl, durationMs: Math.round(t1 - t0), optimized: false });
+      };
+      img.src = dataUrl;
+    };
+    reader.onerror = () => {
+      const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      resolve({ file, base64: null, durationMs: Math.round(t1 - t0), optimized: false });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function BillUploadScanner({ 
   customer, 
   preferredReward = 'Free Biryani',
@@ -77,7 +183,7 @@ export default function BillUploadScanner({
   };
 
   const handleScanAndClaim = async () => {
-    if (!selectedImage) {
+    if (!selectedImage && !selectedFile) {
       setErrorMsg('Please select or capture a bill photo first.');
       return;
     }
@@ -86,40 +192,51 @@ export default function BillUploadScanner({
     setErrorMsg(null);
     setClaimResult(null);
 
-    // Section 21: Branded Loading States
-    // 1. Reading your bill...
-    setScanStep({ status: 'reading', progress: 0.25, message: 'Reading your bill...' });
-
-    const timer1 = setTimeout(() => {
-      // 2. Verifying your bill...
-      setScanStep({ status: 'verifying', progress: 0.50, message: 'Verifying your bill...' });
-    }, 600);
-
-    const timer2 = setTimeout(() => {
-      // 3. Checking loyalty eligibility...
-      setScanStep({ status: 'eligibility', progress: 0.75, message: 'Checking loyalty eligibility...' });
-    }, 1200);
-
     try {
+      // Stage 1: Client-Side Optimization (Downscales large mobile camera images)
+      setScanStep({ status: 'optimizing', message: 'Preparing & optimizing bill image...' });
+      
+      let fileToUpload = selectedFile;
+      let base64ToUpload = selectedImage;
+
+      if (selectedFile) {
+        const opt = await optimizeImageForOcr(selectedFile);
+        if (opt.optimized && opt.file) {
+          fileToUpload = opt.file;
+          if (opt.base64) base64ToUpload = opt.base64;
+        }
+      }
+
+      // Stage 2: Network Upload
+      setScanStep({ status: 'uploading', message: 'Uploading to verification server...' });
+
+      // Stage 3: OCR Analysis & Rule Verification
+      setScanStep({ status: 'analyzing', message: 'Reading receipt with OCR & checking eligibility...' });
+      const analyzingTimer = setTimeout(() => {
+        setScanStep({ status: 'analyzing', message: 'Tesseract OCR is reading receipt lines... Almost done.' });
+      }, 12000);
+
       // Call Express backend (Node.js -> Python OCR -> Validation -> Supabase)
-      const result = await backendApi.claimBill({
-        customerId: customer?.id || 'cust_sai',
-        customerName: customer?.name || 'Customer',
-        imageBase64: selectedImage,
-        file: selectedFile
-      });
+      let result;
+      try {
+        result = await backendApi.claimBill({
+          customerId: customer?.id || 'cust_sai',
+          customerName: customer?.name || 'Customer',
+          imageBase64: base64ToUpload,
+          file: fileToUpload
+        });
+      } finally {
+        clearTimeout(analyzingTimer);
+      }
 
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-
-      if (!result.success) {
-        // Human-friendly error messages (Never expose raw server crash)
-        const msg = result.message || 'We could not verify this bill automatically. Please capture the complete original bill clearly and try again.';
+      if (!result || !result.success) {
+        // Human-friendly specific validation error message from backend
+        const msg = result?.message || 'We could not verify this bill automatically. Please capture the complete original bill clearly and try again.';
         setErrorMsg(msg);
-        setClaimResult(result);
+        setClaimResult(result || { success: false, message: msg });
       } else {
-        // 4. Generating your reward...
-        setScanStep({ status: 'reward', progress: 1.0, message: 'Generating your reward...' });
+        // Generating reward / display state
+        setScanStep({ status: 'reward', message: 'Generating your reward...' });
 
         const isBigBill = result.category === 'BIG_BILL_REWARD' || !!result.couponUnlocked;
 
@@ -189,11 +306,14 @@ export default function BillUploadScanner({
         if (onClaimSuccess) onClaimSuccess(normalizedResult);
       }
     } catch (err) {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
       console.error('Scan error:', err);
-      setErrorMsg('Error processing bill: ' + err.message);
+      const errMsg = err?.message?.includes('timed out') 
+        ? 'Request timed out. Please check your connection and try again.'
+        : `Error processing bill: ${err.message || 'Please try again.'}`;
+      setErrorMsg(errMsg);
+      setClaimResult({ success: false, message: errMsg });
     } finally {
+      // Guaranteed cleanup: resets loading state without clearing claimResult or errorMsg
       setIsScanning(false);
       setScanStep(null);
     }
@@ -427,23 +547,70 @@ export default function BillUploadScanner({
         </div>
       )}
 
-      {/* Error Banner */}
+      {/* Validation Notice & Friendly Error Card */}
       {errorMsg && (
         <div style={{
-          background: 'rgba(165, 38, 42, 0.25)',
-          border: '1px solid rgba(165, 38, 42, 0.6)',
+          background: 'rgba(165, 38, 42, 0.28)',
+          border: '1.5px solid rgba(229, 57, 53, 0.7)',
           color: '#FFCDD2',
-          padding: '12px 16px',
-          borderRadius: '12px',
-          fontSize: '13px',
-          marginBottom: '18px',
+          padding: '16px 20px',
+          borderRadius: '16px',
+          fontSize: '13.5px',
+          marginBottom: '20px',
           display: 'flex',
-          gap: '10px',
-          alignItems: 'flex-start'
+          flexDirection: 'column',
+          gap: '12px'
         }}>
-          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div>
-            <strong>Notice:</strong> {errorMsg}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px', color: '#EF5350' }} />
+            <div>
+              <div style={{ fontWeight: '800', color: '#FFF', fontSize: '15px', marginBottom: '4px' }}>
+                {claimResult?.code === 'REQUEST_TIMEOUT' ? 'Verification Timed Out' : 'Bill Verification Notice'}
+              </div>
+              <div style={{ lineHeight: '1.5', color: '#FFCDD2' }}>
+                {errorMsg}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleTriggerCamera}
+              style={{
+                background: 'var(--bright-green)',
+                color: '#FFF',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Camera size={14} /> Take New Photo
+            </button>
+            <button
+              type="button"
+              onClick={handleTriggerUpload}
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                color: '#FFF',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '12.5px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Upload size={14} /> Choose Different Image
+            </button>
           </div>
         </div>
       )}
@@ -677,10 +844,10 @@ export default function BillUploadScanner({
             </div>
           )}
 
-          {/* OCR Scanning Progress Bar */}
+          {/* Honest Stage Activity Indicator (Tied to real actions, no fake percentages) */}
           {isScanning && (
             <div style={{
-              background: 'rgba(6, 69, 45, 0.4)',
+              background: 'rgba(6, 69, 45, 0.45)',
               border: '1px solid var(--gold-green)',
               borderRadius: '14px',
               padding: '16px',
@@ -689,14 +856,15 @@ export default function BillUploadScanner({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: 'var(--gold-green)', fontWeight: '800', fontSize: '14px' }}>
                 <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                {scanStep?.message || 'Reading Dasari Darbar bill with OCR...'}
+                <span>{scanStep?.message || 'Processing bill...'}</span>
               </div>
-              <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', marginTop: '12px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.3)', borderRadius: '3px', marginTop: '12px', overflow: 'hidden' }}>
                 <div style={{
-                  width: `${Math.round((scanStep?.progress || 0.45) * 100)}%`,
+                  width: '100%',
                   height: '100%',
-                  background: 'linear-gradient(90deg, #E4C47D, #81C784)',
-                  transition: 'width 0.3s ease'
+                  background: 'linear-gradient(90deg, #E4C47D, #81C784, #E4C47D)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer 1.5s infinite linear'
                 }}></div>
               </div>
             </div>

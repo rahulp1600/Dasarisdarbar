@@ -299,6 +299,17 @@ export async function validateBillData(ocrData) {
     };
   }
 
+  // 4b. Strict same-day dining rule: bills must be from today's business date
+  const todayBusinessDate = getBusinessDate();
+  if (ocrData.bill_date !== todayBusinessDate) {
+    return {
+      isValid: false,
+      isDateMismatch: true,
+      userMessage: `Only same-day dining bills can be claimed for loyalty rewards. This bill is dated ${ocrData.bill_date} (today is ${todayBusinessDate}).`,
+      technicalReason: `Date mismatch: Bill date ${ocrData.bill_date} does not match today's date ${todayBusinessDate}`
+    };
+  }
+
   // 5. Bill amount check
   const amount = Number(ocrData.bill_amount);
   if (isNaN(amount) || amount <= 0) {

@@ -78,7 +78,7 @@ def extract_bill_number(text: str) -> str | None:
 
     # Priority patterns (tolerant to OCR like Bil/Na/Nu/No)
     patterns = [
-        r"(?:BILL|BIL|BLL|INVOICE|INV|ORDER|CHECK|TOKEN|RECEIPT)\s*(?:NO|NUM|NUMBER|NA|NU|#)?[:.\s-]*([A-Z0-9-]{1,15})\b",
+        r"\b(?:BILL|BIL|BLL|INVOICE|INV|ORDER|CHECK|TOKEN|RECEIPT)\b\s*(?:NO|NUM|NUMBER|NA|NU|#)?[:.\s-]*([A-Z0-9-]{1,15})\b",
         r"\b(DD[-\s]?\d{1,8})\b",
         r"\bBILL\s*#?\s*(\d{1,8})\b",
         r"\bINV\s*#?\s*(\d{1,8})\b",
