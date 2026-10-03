@@ -14,7 +14,11 @@ WORKDIR /app
 
 # Set up Python virtualenv
 RUN python3 -m venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
+ENV PATH="/app/venv/bin:$PATH" \
+    OMP_THREAD_LIMIT=1 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1
 
 # Install Python OCR dependencies
 COPY ocr-service/requirements.txt ./ocr-service/
