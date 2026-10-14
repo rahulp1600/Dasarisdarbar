@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dataStore } from '../services/store';
 import { Search, UtensilsCrossed } from 'lucide-react';
 
@@ -6,8 +6,17 @@ export default function Menu() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [filterVeg, setFilterVeg] = useState('all'); // 'all', 'veg', 'non-veg'
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuItems, setMenuItems] = useState(dataStore.getMenuItems());
 
-  const menuItems = dataStore.getMenuItems();
+  useEffect(() => {
+    async function loadFreshMenu() {
+      const synced = await dataStore.syncMenuWithRemote();
+      if (synced && synced.length > 0) {
+        setMenuItems(synced);
+      }
+    }
+    loadFreshMenu();
+  }, []);
 
   const filteredItems = menuItems.filter(item => {
     if (!item.is_available) return false;

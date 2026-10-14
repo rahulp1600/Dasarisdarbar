@@ -325,6 +325,7 @@ export class LoyaltyEngine {
         phone: '',
         email: '',
         track1Streak: 0, // 0/5 qualifying visits
+        track1CycleTotal: 0, // cumulative ₹ amount in active cycle
         createdAt: new Date().toISOString()
       };
       this.storage.set('dd_loyalty_accounts', accounts);
@@ -490,16 +491,34 @@ export class LoyaltyEngine {
     // 6. Approve Claim & Apply Benefit
     let rewardUnlocked = null;
     let couponGenerated = null;
+    let cycleTotal = Number(customer.track1CycleTotal || 0);
 
     if (isVisitReward) {
-      // Increment Visit Streak (0/5 -> 5/5)
+      // Find prior approved claims in current cycle
+      const customerApprovedClaims = claims.filter(c =>
+        c.customerId === customer.id &&
+        c.status === 'approved' &&
+        (c.category === 'VISIT REWARDS' || c.category === 'VISIT_REWARD')
+      );
+
+      const rewards = this.getRewards();
+      const lastRedeemedReward = rewards
+        .filter(r => r.customerId === customer.id && r.status === 'REDEEMED')
+        .sort((a,b) => new Date(b.redeemedAt || b.createdAt) - new Date(a.redeemedAt || a.createdAt))[0];
+      const lastRedeemedTime = lastRedeemedReward ? new Date(lastRedeemedReward.redeemedAt || lastRedeemedReward.createdAt).getTime() : 0;
+      const priorCycleClaims = customerApprovedClaims.filter(c => new Date(c.submittedAt || c.claimKolkataDate).getTime() > lastRedeemedTime);
+      const priorCycleTotal = priorCycleClaims.reduce((sum, c) => sum + Number(c.originalAmount || 0), 0);
+      cycleTotal = priorCycleTotal + Number(amount);
+
       const currentStreak = Number(customer.track1Streak || 0);
       const newStreak = Math.min(5, currentStreak + 1);
       customer.track1Streak = newStreak;
+      customer.track1CycleTotal = cycleTotal;
       this.saveCustomerAccount(customer);
 
-      // If customer reaches 5/5 -> Trigger Random Reward Assignment
-      if (newStreak === 5) {
+      // Reward qualifies ONLY when at least 5 valid bills AND combined total >= 2000
+      const isEligible = newStreak >= 5 && cycleTotal >= 2000;
+      if (isEligible) {
         rewardUnlocked = this.assignRandomMilestoneReward(customer);
       }
     } else {
@@ -539,15 +558,18 @@ export class LoyaltyEngine {
       success: true,
       status: 'approved',
       message: isVisitReward
-        ? (customer.track1Streak === 5 
-            ? '🎉 5th Qualifying Visit Completed! Your random reward is unlocked!' 
-            : `Visit verified! Streak progress: ${customer.track1Streak}/5 visits.`)
+        ? (rewardUnlocked
+            ? `🎉 5 Qualifying Visits & ₹${cycleTotal.toFixed(0)} Combined Total Completed! Your random reward is unlocked!`
+            : (customer.track1Streak >= 5
+                ? `Visit verified! 5 visits recorded (combined total: ₹${cycleTotal.toFixed(0)} / ₹2,000). Spend ₹${Math.max(0, 2000 - cycleTotal).toFixed(0)} more to unlock your milestone reward!`
+                : `Visit verified! Streak progress: ${customer.track1Streak}/5 visits (combined total: ₹${cycleTotal.toFixed(0)} / ₹2,000).`))
         : `Big Bill verified! You unlocked a ${couponGenerated.discountPercent}% instant discount coupon!`,
       claim: approvedClaim,
       rewardUnlocked,
       couponGenerated,
       customer,
-      newStreak: customer.track1Streak
+      newStreak: customer.track1Streak,
+      cycleTotalAmount: cycleTotal
     };
   }
 
@@ -579,12 +601,29 @@ export class LoyaltyEngine {
     let couponGenerated = null;
 
     if (isVisit) {
+      const customerApprovedClaims = claims.filter(c =>
+        c.customerId === customer.id &&
+        c.status === 'approved' &&
+        c.id !== claim.id &&
+        (c.category === 'VISIT REWARDS' || c.category === 'VISIT_REWARD')
+      );
+      const rewards = this.getRewards();
+      const lastRedeemedReward = rewards
+        .filter(r => r.customerId === customer.id && r.status === 'REDEEMED')
+        .sort((a,b) => new Date(b.redeemedAt || b.createdAt) - new Date(a.redeemedAt || a.createdAt))[0];
+      const lastRedeemedTime = lastRedeemedReward ? new Date(lastRedeemedReward.redeemedAt || lastRedeemedReward.createdAt).getTime() : 0;
+      const priorCycleClaims = customerApprovedClaims.filter(c => new Date(c.submittedAt || c.claimKolkataDate).getTime() > lastRedeemedTime);
+      const priorCycleTotal = priorCycleClaims.reduce((sum, c) => sum + Number(c.originalAmount || 0), 0);
+      const cycleTotal = priorCycleTotal + Number(amount);
+
       const currentStreak = Number(customer.track1Streak || 0);
       const newStreak = Math.min(5, currentStreak + 1);
       customer.track1Streak = newStreak;
+      customer.track1CycleTotal = cycleTotal;
       this.saveCustomerAccount(customer);
 
-      if (newStreak === 5) {
+      const isEligible = newStreak >= 5 && cycleTotal >= 2000;
+      if (isEligible) {
         rewardUnlocked = this.assignRandomMilestoneReward(customer);
         claim.rewardId = rewardUnlocked.id;
       }
@@ -635,10 +674,11 @@ export class LoyaltyEngine {
       reward.staffNotes = staffNotes;
       this.saveRewards(rewards);
 
-      // Rule 29: Reset streak 5/5 -> 0/5 ONLY on successful redemption!
+      // Rule 29: Reset streak 5/5 -> 0/5 & cycle total ONLY on successful redemption!
       const customer = this.getCustomerAccount(reward.customerId);
       if (customer) {
         customer.track1Streak = 0;
+        customer.track1CycleTotal = 0;
         this.saveCustomerAccount(customer);
       }
 

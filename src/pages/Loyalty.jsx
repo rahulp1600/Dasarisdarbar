@@ -68,8 +68,10 @@ export default function Loyalty() {
     : [];
 
   const streak = Number(customer?.track1Streak || 0);
+  const cycleTotal = Number(customer?.track1CycleTotal || 0);
+  const isMilestoneEligible = streak >= 5 && cycleTotal >= 2000;
 
-  // Check if customer has reached 5/5 milestone and has an active unredeemed reward
+  // Check if customer has reached milestone and has an active unredeemed reward
   const milestoneReward = customerRewards.find(r => r.status === 'ACTIVE' || r.status === 'AVAILABLE');
 
   const handleCopyCode = (code) => {
@@ -162,7 +164,7 @@ export default function Loyalty() {
               </span>
             </div>
             <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
-              Bill total &lt; ₹2,000
+              5 bills &amp; combined total &ge; ₹2,000
             </span>
           </div>
 
@@ -197,15 +199,26 @@ export default function Loyalty() {
             })}
           </div>
 
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
+            <span>Combined Total:</span>
+            <strong style={{ color: 'var(--gold-green)' }}>
+              ₹{cycleTotal.toLocaleString('en-IN')} / ₹2,000
+            </strong>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
             <span>Next milestone:</span>
-            <strong style={{ color: 'var(--gold-green)' }}>
-              {streak === 5 ? 'Milestone achieved!' : '5 verified visits'}
+            <strong style={{ color: isMilestoneEligible ? '#81C784' : 'var(--gold-green)' }}>
+              {isMilestoneEligible
+                ? 'Milestone achieved!'
+                : (streak >= 5
+                    ? `5 visits recorded (₹${Math.max(0, 2000 - cycleTotal).toLocaleString('en-IN')} more needed)`
+                    : `${5 - streak} more visit${5 - streak === 1 ? '' : 's'} needed`)}
             </strong>
           </div>
 
           {/* 5/5 REWARD UNLOCK EXPERIENCE (Section 28) */}
-          {streak === 5 && milestoneReward && (
+          {isMilestoneEligible && milestoneReward && (
             <div style={{
               marginTop: '18px',
               background: 'linear-gradient(135deg, rgba(228, 196, 125, 0.25) 0%, rgba(6, 69, 45, 0.8) 100%)',
@@ -217,7 +230,7 @@ export default function Loyalty() {
             }}>
               <div style={{ fontSize: '18px', marginBottom: '4px' }}>🎉 REWARD UNLOCKED</div>
               <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', marginBottom: '8px' }}>
-                You've completed 5 verified visits!
+                You've completed 5 verified visits with ₹{cycleTotal.toLocaleString('en-IN')} combined total!
               </div>
               <div style={{ fontSize: '11px', color: 'var(--gold-green)', fontWeight: '800', letterSpacing: '0.1em' }}>
                 YOUR REWARD:

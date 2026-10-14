@@ -288,6 +288,123 @@ export const localStoreManager = {
     localStoreManager.saveMenuItems(menu);
     return menu;
   },
+  updateMenuItemPrice: (id, newPrice) => {
+    const menu = localStoreManager.getMenuItems();
+    const numericPrice = Number(newPrice);
+    const updated = menu.map(item => {
+      if (item.id === id || String(item.id) === String(id)) {
+        return { ...item, price: numericPrice };
+      }
+      return item;
+    });
+    localStoreManager.saveMenuItems(updated);
+    return updated;
+  },
+
+  syncMenuWithRemote: async () => {
+    try {
+      const backendUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || 'http://127.0.0.1:5001';
+      const res = await fetch(`${backendUrl}/api/menu`);
+      if (!res.ok) return localStoreManager.getMenuItems();
+      const json = await res.json();
+      if (!json.success) return localStoreManager.getMenuItems();
+
+      const current = localStoreManager.getMenuItems();
+      let changed = false;
+
+      // 1. Apply Supabase prices (matched by name or UUID)
+      if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+        json.data.forEach(sbItem => {
+          if (!sbItem.name || sbItem.price === undefined) return;
+          const match = current.find(m => m.name.toLowerCase() === sbItem.name.toLowerCase());
+          if (match && Number(match.price) !== Number(sbItem.price)) {
+            match.price = Number(sbItem.price);
+            changed = true;
+          }
+        });
+      }
+
+      // 2. Apply backend localOverrides (matched by id or name)
+      if (json.localOverrides && Array.isArray(json.localOverrides) && json.localOverrides.length > 0) {
+        json.localOverrides.forEach(ov => {
+          const match = current.find(m => m.id === ov.id || (ov.name && m.name.toLowerCase() === ov.name.toLowerCase()));
+          if (match && ov.price !== undefined && Number(match.price) !== Number(ov.price)) {
+            match.price = Number(ov.price);
+            changed = true;
+          }
+        });
+      }
+
+      if (changed) {
+        localStoreManager.saveMenuItems(current);
+      }
+      return current;
+    } catch (e) {
+      console.warn('Menu remote sync fallback:', e.message);
+      return localStoreManager.getMenuItems();
+    }
+  },
+
+  // --- TABLE RESERVATION OFFERS ---
+  getReservationOffers: () => {
+    const initial = [
+      {
+        id: 'roffer_welcome',
+        title: 'Family Feast Dine-In Special',
+        description: 'Special 10% promotional dining benefit on your reserved table for parties of 4 or more.',
+        discount_percentage: 10,
+        start_date: '2026-10-01',
+        end_date: '2026-12-31',
+        active: true,
+        created_at: '2026-10-01T00:00:00.000Z'
+      }
+    ];
+    return getStorage('dd_reservation_offers', initial);
+  },
+  saveReservationOffers: (offers) => setStorage('dd_reservation_offers', offers),
+  getActiveReservationOffers: () => {
+    const today = new Date().toISOString().split('T')[0];
+    const all = localStoreManager.getReservationOffers();
+    return all.filter(o => {
+      if (!o.active) return false;
+      if (o.start_date && o.start_date > today) return false;
+      if (o.end_date && o.end_date < today) return false;
+      return true;
+    });
+  },
+  addReservationOffer: (offer) => {
+    const offers = localStoreManager.getReservationOffers();
+    const newOffer = {
+      id: offer.id || 'roffer_' + Date.now(),
+      title: offer.title,
+      description: offer.description || '',
+      discount_percentage: Number(offer.discount_percentage) || 0,
+      start_date: offer.start_date || new Date().toISOString().split('T')[0],
+      end_date: offer.end_date || new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+      active: offer.active !== false,
+      created_at: new Date().toISOString()
+    };
+    offers.unshift(newOffer);
+    localStoreManager.saveReservationOffers(offers);
+    return newOffer;
+  },
+  updateReservationOffer: (id, fields) => {
+    const offers = localStoreManager.getReservationOffers();
+    const updated = offers.map(o => (o.id === id ? { ...o, ...fields } : o));
+    localStoreManager.saveReservationOffers(updated);
+    return updated;
+  },
+  toggleReservationOfferActive: (id) => {
+    const offers = localStoreManager.getReservationOffers();
+    const updated = offers.map(o => (o.id === id ? { ...o, active: !o.active } : o));
+    localStoreManager.saveReservationOffers(updated);
+    return updated;
+  },
+  deleteReservationOffer: (id) => {
+    const offers = localStoreManager.getReservationOffers().filter(o => o.id !== id);
+    localStoreManager.saveReservationOffers(offers);
+    return offers;
+  },
 
   // --- LOYALTY OFFERS (ADMIN-MANAGED REWARD POOL) ---
   getLoyaltyOffers: () => loyaltyEngine.getOffers(),
@@ -380,6 +497,18 @@ export const localStoreManager = {
     const bookings = localStoreManager.getBookings();
     const todayStr = new Date().toISOString().split('T')[0];
 
+    const offerSnapshot = bookingData.offer_snapshot || (bookingData.offer_id ? {
+      id: bookingData.offer_id,
+      title: bookingData.offer_title || '',
+      discount_percentage: Number(bookingData.offer_discount_percentage) || null
+    } : null);
+
+    const offerNote = offerSnapshot
+      ? ` [Offer Request: ${offerSnapshot.title} - ${offerSnapshot.discount_percentage}% OFF]`
+      : '';
+
+    const combinedNotes = (bookingData.notes ? bookingData.notes.trim() : '') + offerNote;
+
     const newBooking = {
       id: 'b_' + Date.now(),
       name: bookingData.name,
@@ -388,8 +517,12 @@ export const localStoreManager = {
       table_number: Number(bookingData.table_number || 1),
       booking_date: bookingData.booking_date || todayStr,
       booking_time: bookingData.booking_time || '19:30',
-      notes: bookingData.notes || '',
-      status: 'confirmed',
+      notes: combinedNotes.trim(),
+      status: 'pending', // Reservation Request Pending Confirmation (never auto-confirmed)
+      offer_id: offerSnapshot ? offerSnapshot.id : null,
+      offer_title: offerSnapshot ? offerSnapshot.title : null,
+      offer_discount_percentage: offerSnapshot ? offerSnapshot.discount_percentage : null,
+      offer_snapshot: offerSnapshot,
       created_at: new Date().toISOString()
     };
 

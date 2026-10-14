@@ -272,6 +272,9 @@ export default function BillUploadScanner({
           const custAccount = loyaltyEngine.getCustomerAccount(customer.id);
           if (custAccount && typeof result.newStreak === 'number' && !isBigBill) {
             custAccount.track1Streak = result.newStreak;
+            if (typeof result.cycleTotalAmount === 'number') {
+              custAccount.track1CycleTotal = result.cycleTotalAmount;
+            }
             loyaltyEngine.saveCustomerAccount(custAccount);
           }
           if (normalizedResult.rewardUnlocked) {

@@ -60,9 +60,9 @@ const REVIEWS = [
   }
 ];
 
-const GMAPS_REVIEW_URL = "https://www.google.com/maps/place/DASARI'S+DARBAR/@17.3665151,78.5422924,16.55z/data=!4m8!3m7!1s0x3bcb99005423798b:0x6d29f258f4c62afe!8m2!3d17.3663577!4d78.544067!9m1!1b1!16s%2Fg%2F11nr3d_4fc?entry=ttu&g_ep=EgoyMDI2MDkyMy4wIKXMDSoASAFQAw%3D%3D";
+export const GMAPS_REVIEW_URL = "https://www.google.com/maps/place/DASARI'S+DARBAR/@17.3665151,78.5422924,16.55z/data=!4m8!3m7!1s0x3bcb99005423798b:0x6d29f258f4c62afe!8m2!3d17.3663577!4d78.544067!9m1!1b1!16s%2Fg%2F11nr3d_4fc?entry=ttu&g_ep=EgoyMDI2MDkyMy4wIKXMDSoASAFQAw%3D%3D";
 
-export default function CustomerReviewsSlider() {
+export default function CustomerReviewsSlider({ variant = 'hero' }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef(null);
@@ -103,6 +103,227 @@ export default function CustomerReviewsSlider() {
 
   const current = REVIEWS[currentIndex];
 
+  // Compact hero card variant (replaces promotional card in hero)
+  if (variant === 'hero') {
+    return (
+      <div
+        className="hero-reviews-card"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        role="region"
+        aria-label="Customer Reviews Carousel"
+      >
+        {/* Card Header: Eyebrow & Google Rating Badge */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '8px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: 'var(--gold-green)', fontSize: '11px', fontWeight: '800', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+              CUSTOMER REVIEWS
+            </div>
+            <div style={{ color: '#FFF', fontSize: '17px', fontWeight: '800', marginTop: '2px' }}>
+              What Diners Say
+            </div>
+          </div>
+
+          <a
+            href={GMAPS_REVIEW_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Read all Google reviews"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(228, 196, 125, 0.15)',
+              border: '1px solid rgba(228, 196, 125, 0.35)',
+              padding: '5px 12px',
+              borderRadius: '20px',
+              textDecoration: 'none',
+              color: '#FFF',
+              fontSize: '12px',
+              fontWeight: '800',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(228, 196, 125, 0.28)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(228, 196, 125, 0.15)'}
+          >
+            <div style={{ display: 'flex', gap: '2px', color: '#FFC107' }}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star key={s} size={11} fill="#FFC107" strokeWidth={0} />
+              ))}
+            </div>
+            <span>4.8 on Google</span>
+            <ExternalLink size={11} color="var(--gold-green)" />
+          </a>
+        </div>
+
+        {/* Inner Review Content Card */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid rgba(228, 196, 125, 0.2)',
+          borderRadius: '16px',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          flexGrow: 1,
+          minHeight: '205px'
+        }}>
+          <div>
+            {/* Top Reviewer Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: current.avatarBg,
+                  color: current.textColor || '#FFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '900',
+                  fontSize: '16px',
+                  border: '1px solid var(--gold-green)',
+                  flexShrink: 0
+                }}>
+                  {current.initial}
+                </div>
+                <div>
+                  <div style={{ fontSize: '14.5px', fontWeight: '800', color: '#FFF', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span>{current.name}</span>
+                    <ShieldCheck size={14} color="var(--gold-green)" />
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '1px' }}>
+                    {current.badge} • <span style={{ color: 'rgba(228, 196, 125, 0.85)' }}>{current.date}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  {[...Array(current.rating)].map((_, i) => (
+                    <Star key={i} size={14} fill="#FFC107" color="#FFC107" strokeWidth={0} />
+                  ))}
+                </div>
+                {current.tag && (
+                  <span style={{
+                    background: 'rgba(228, 196, 125, 0.2)',
+                    color: 'var(--gold-green)',
+                    border: '1px solid rgba(228, 196, 125, 0.35)',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontSize: '10px',
+                    fontWeight: '800'
+                  }}>
+                    {current.tag}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Review Quote */}
+            <p style={{
+              fontSize: '13.5px',
+              lineHeight: '1.55',
+              color: 'rgba(255, 255, 255, 0.92)',
+              margin: '6px 0 0 0',
+              fontStyle: 'normal',
+              maxHeight: '135px',
+              overflowY: 'auto',
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(228, 196, 125, 0.3) transparent'
+            }}>
+              "{current.text}"
+            </p>
+          </div>
+        </div>
+
+        {/* Footer: Indicator Dots + Arrow Navigation */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '14px',
+          paddingTop: '10px'
+        }}>
+          {/* Dot Indicators */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            {REVIEWS.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
+                style={{
+                  width: currentIndex === idx ? '22px' : '7px',
+                  height: '7px',
+                  borderRadius: '4px',
+                  background: currentIndex === idx ? 'var(--gold-green)' : 'rgba(255,255,255,0.3)',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                aria-label={`Go to review ${idx + 1}`}
+              />
+            ))}
+          </div>
+
+          {/* Navigation Controls */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={handlePrev}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#FFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              aria-label="Previous Review"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#FFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              aria-label="Next Review"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full-width standalone section variant
   return (
     <section 
       className="section-dark" 

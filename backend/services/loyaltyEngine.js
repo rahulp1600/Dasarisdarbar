@@ -33,6 +33,61 @@ export function generateVoucherCode(prefix = 'DD-RW') {
 }
 
 /**
+ * Retrieves all approved visit reward claims for customer in the active cycle
+ * (i.e. since the most recent redeemed milestone reward)
+ */
+export async function getCycleApprovedVisitClaims(customerId) {
+  let redemptions = [];
+  let claims = [];
+
+  if (supabase) {
+    try {
+      const [redRes, clmRes] = await Promise.all([
+        supabase.from('redemptions').select('*').eq('customer_id', customerId).eq('reward_type', 'milestone_reward').order('created_at', { ascending: false }).limit(1),
+        supabase.from('loyalty_claims').select('*').eq('customer_id', customerId).eq('status', 'approved').order('created_at', { ascending: false })
+      ]);
+      if (!redRes.error && redRes.data) redemptions = redRes.data;
+      if (!clmRes.error && clmRes.data) claims = clmRes.data;
+    } catch (e) {
+      console.warn('Supabase getCycleApprovedVisitClaims fallback:', e.message);
+    }
+  }
+
+  // Fallback / merge with local store
+  const store = readLocalStore();
+  if (redemptions.length === 0 && store.redemptions) {
+    const localR = store.redemptions
+      .filter(r => r.customer_id === customerId && r.reward_type === 'milestone_reward')
+      .sort((a,b) => new Date(b.created_at || b.redeemed_at) - new Date(a.created_at || a.redeemed_at));
+    if (localR.length > 0) redemptions = localR;
+  }
+  if (store.loyalty_claims) {
+    const localC = store.loyalty_claims
+      .filter(c => c.customer_id === customerId && c.status === 'approved')
+      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    for (const lc of localC) {
+      if (!claims.some(c => c.id === lc.id || (c.bill_fingerprint && c.bill_fingerprint === lc.bill_fingerprint))) {
+        claims.push(lc);
+      }
+    }
+  }
+
+  // Filter for visit rewards only (handling category naming variations)
+  const visitClaims = claims.filter(c => {
+    const cat = (c.reward_category || c.category || '').toUpperCase();
+    return cat === 'VISIT_REWARD' || cat === 'VISIT REWARDS' || cat === 'VISIT';
+  });
+
+  const lastRedeemedAt = redemptions[0]?.created_at || redemptions[0]?.redeemed_at || null;
+  if (!lastRedeemedAt) {
+    return visitClaims;
+  }
+
+  const lastRedeemedTime = new Date(lastRedeemedAt).getTime();
+  return visitClaims.filter(c => new Date(c.created_at || c.submittedAt).getTime() > lastRedeemedTime);
+}
+
+/**
  * Retrieves customer's loyalty profile, progress, rewards, and coupons
  */
 export async function getCustomerLoyaltyState(customerId) {
@@ -41,7 +96,8 @@ export async function getCustomerLoyaltyState(customerId) {
     qualifying_visits_count: 0,
     total_visits_lifetime: 0,
     last_visit_date: null,
-    milestone_unlocked: false
+    milestone_unlocked: false,
+    cycle_total_amount: 0
   };
 
   let rewards = [];
@@ -80,6 +136,10 @@ export async function getCustomerLoyaltyState(customerId) {
         if (localB.length > 0) recentBills = localB;
       }
 
+      const cycleClaims = await getCycleApprovedVisitClaims(customerId);
+      const cycleTotal = cycleClaims.reduce((sum, c) => sum + Number(c.bill_amount || c.originalAmount || 0), 0);
+      progress.cycle_total_amount = cycleTotal;
+
       return { progress, rewards, coupons, recentBills };
     } catch (e) {
       console.warn('Supabase getCustomerLoyaltyState fallback to local:', e.message);
@@ -92,6 +152,10 @@ export async function getCustomerLoyaltyState(customerId) {
   rewards = store.customer_rewards.filter(r => r.customer_id === customerId);
   coupons = store.big_bill_coupons.filter(c => c.customer_id === customerId);
   recentBills = store.verified_bills.filter(b => b.customer_id === customerId).slice(-10).reverse();
+
+  const cycleClaims = await getCycleApprovedVisitClaims(customerId);
+  const cycleTotal = cycleClaims.reduce((sum, c) => sum + Number(c.bill_amount || c.originalAmount || 0), 0);
+  progress.cycle_total_amount = cycleTotal;
 
   return { progress, rewards, coupons, recentBills };
 }
@@ -240,6 +304,7 @@ export async function processVerifiedBillClaim({
   let couponGenerated = null;
   let currentStreak = 0;
   let newStreak = 0;
+  let cycleTotalAmount = 0;
 
   if (isBigBill) {
     // ₹2000+ Big Bill Coupon Rule:
@@ -282,17 +347,25 @@ export async function processVerifiedBillClaim({
     const totalLifetime = (userState.progress.total_visits_lifetime || 0) + 1;
     newStreak = Math.min(5, currentStreak + 1);
 
+    // Cumulative Total Calculation for Current Cycle (Asia/Kolkata cycle since last redeemed reward)
+    const priorCycleClaims = await getCycleApprovedVisitClaims(customerId);
+    const priorCycleTotal = priorCycleClaims.reduce((sum, c) => sum + Number(c.bill_amount || c.originalAmount || 0), 0);
+    cycleTotalAmount = priorCycleTotal + Number(amount);
+
+    // ELIGIBILITY RULE: Must have at least 5 valid, verified bills whose combined total is at least ₹2,000
+    const isEligible = newStreak >= 5 && cycleTotalAmount >= 2000;
+
     let progressUpdate = {
       customer_id: customerId,
       qualifying_visits_count: newStreak,
       total_visits_lifetime: totalLifetime,
       last_visit_date: todayKolkata,
-      milestone_unlocked: newStreak === 5,
+      milestone_unlocked: isEligible,
       updated_at: new Date().toISOString()
     };
 
-    // If milestone 5/5 reached -> Generate random reward from active pool
-    if (newStreak === 5) {
+    // If customer qualifies (>= 5 bills AND combined total >= ₹2,000) -> Generate random reward from active pool
+    if (isEligible) {
       const activeOffers = await getActiveRewardOffers();
       const selectedOffer = activeOffers.length > 0 
         ? activeOffers[Math.floor(Math.random() * activeOffers.length)]
@@ -341,7 +414,10 @@ export async function processVerifiedBillClaim({
         console.warn('Supabase loyalty_progress upsert fallback:', e.message);
       }
     }
-    store.loyalty_progress[customerId] = progressUpdate;
+    store.loyalty_progress[customerId] = {
+      ...progressUpdate,
+      cycle_total_amount: cycleTotalAmount
+    };
   }
 
   // 4. Record successful claim
@@ -362,8 +438,12 @@ export async function processVerifiedBillClaim({
   writeLocalStore(store);
 
   // 5. Log audit trail
+  const actionType = isBigBill
+    ? 'BIG_BILL_COUPON_ISSUED'
+    : (rewardGenerated ? 'MILESTONE_REWARD_ISSUED' : 'VISIT_RECORDED');
+
   await logAuditEvent({
-    actionType: isBigBill ? 'BIG_BILL_COUPON_ISSUED' : (newStreak === 5 ? 'MILESTONE_REWARD_ISSUED' : 'VISIT_RECORDED'),
+    actionType,
     actorId: customerId,
     targetRecordType: isBigBill ? 'big_bill_coupons' : 'verified_bills',
     targetRecordId: isBigBill ? (couponGenerated?.id || '') : billRecord.id,
@@ -380,13 +460,16 @@ export async function processVerifiedBillClaim({
     success: true,
     message: isBigBill
       ? `₹${amount} bill verified! 10% Big Bill Discount Coupon (${couponGenerated.coupon_code}) unlocked!`
-      : (newStreak === 5
-          ? `Congratulations! 5th qualifying visit recorded! Milestone Reward (${rewardGenerated.reward_name}) is now ready!`
-          : `Visit verified! Loyalty progress updated to ${newStreak}/5 visits.`),
+      : (rewardGenerated
+          ? `🎉 Congratulations! 5 valid visits totaling ₹${(typeof cycleTotalAmount === 'number' ? cycleTotalAmount : amount).toFixed(0)} recorded! Milestone Reward (${rewardGenerated.reward_name}) is now ready!`
+          : (newStreak >= 5
+              ? `Visit verified! (${newStreak}/5 visits completed, combined total: ₹${(typeof cycleTotalAmount === 'number' ? cycleTotalAmount : amount).toFixed(0)} / ₹2,000. Combined total must be at least ₹2,000 to unlock milestone reward.)`
+              : `Visit verified! Loyalty progress updated to ${newStreak}/5 visits (combined total: ₹${(typeof cycleTotalAmount === 'number' ? cycleTotalAmount : amount).toFixed(0)} / ₹2,000).`)),
     category: rewardCategory,
     bill: billRecord,
     claim: claimRecord,
     newStreak,
+    cycleTotalAmount: isBigBill ? 0 : (typeof cycleTotalAmount === 'number' ? cycleTotalAmount : amount),
     rewardGenerated,
     couponGenerated
   };
@@ -422,19 +505,20 @@ async function recordClaimAttempt({
     created_at: new Date().toISOString()
   };
 
+  let savedClaim = claim;
   if (supabase) {
     try {
       const { data, error } = await supabase.from('loyalty_claims').insert([claim]).select();
-      if (!error && data && data[0]) return data[0];
+      if (!error && data && data[0]) savedClaim = data[0];
     } catch (e) {
       console.warn('Supabase loyalty_claims insert fallback:', e.message);
     }
   }
 
   const store = readLocalStore();
-  store.loyalty_claims.push(claim);
+  store.loyalty_claims.push(savedClaim);
   writeLocalStore(store);
-  return claim;
+  return savedClaim;
 }
 
 /**
@@ -587,6 +671,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
     if (store.loyalty_progress[voucher.customer_id]) {
       store.loyalty_progress[voucher.customer_id].qualifying_visits_count = 0;
       store.loyalty_progress[voucher.customer_id].milestone_unlocked = false;
+      store.loyalty_progress[voucher.customer_id].cycle_total_amount = 0;
       store.loyalty_progress[voucher.customer_id].updated_at = nowIso;
       streakReset = true;
     }

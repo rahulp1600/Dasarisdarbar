@@ -15,15 +15,59 @@ import AdminDashboard from './pages/AdminDashboard';
 
 import './styles/main.css';
 
+function getPageFromLocation() {
+  if (typeof window === 'undefined') return 'home';
+  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  const slug = hash || path;
+
+  if (slug === 'menu') return 'menu';
+  if (slug === 'loyalty') return 'loyalty';
+  if (slug === 'booking') return 'booking';
+  if (slug === 'qrmenu' || slug === 'qr-menu') return 'qrmenu';
+  if (slug === 'visitus' || slug === 'visit-us') return 'visitus';
+  if (slug === 'admin') return 'admin';
+  return 'home';
+}
+
 export default function App() {
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = useState(() => getPageFromLocation());
   const [adminTab, setAdminTab] = useState('menu');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
+  // Sync state navigation with browser URL bar and history
+  const navigateToPage = (target) => {
+    const page = typeof target === 'function' ? target(activePage) : target;
+    setActivePage(page);
+
+    const targetPath = page === 'home' ? '/' : `/${page}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ page }, '', targetPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    // Keep activePage in sync with browser Back / Forward buttons and QR direct visits
+    const handleLocationChange = () => {
+      const page = getPageFromLocation();
+      setActivePage(page);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
   useEffect(() => {
     dataStore.syncWithSupabase();
+
     const timer = setTimeout(() => {
       setIsAppLoading(false);
     }, 600);
@@ -106,7 +150,7 @@ export default function App() {
 
   const handleOpenAdminModal = () => {
     if (isAdminLoggedIn) {
-      setActivePage('admin');
+      navigateToPage('admin');
     } else {
       setIsAdminModalOpen(true);
     }
@@ -114,37 +158,37 @@ export default function App() {
 
   const handleLoginSuccess = () => {
     setIsAdminLoggedIn(true);
-    setActivePage('admin');
+    navigateToPage('admin');
   };
 
   const handleLogoutAdmin = () => {
     setIsAdminLoggedIn(false);
-    setActivePage('home');
+    navigateToPage('home');
   };
 
   return (
     <div className="app-layout">
       <Navbar 
         activePage={activePage}
-        setActivePage={setActivePage}
+        setActivePage={navigateToPage}
         onOpenAdminModal={handleOpenAdminModal}
         isAdminLoggedIn={isAdminLoggedIn}
         onLogoutAdmin={handleLogoutAdmin}
       />
 
       <main style={{ flexGrow: 1 }}>
-        {activePage === 'home' && <Home setActivePage={setActivePage} />}
+        {activePage === 'home' && <Home setActivePage={navigateToPage} />}
         {activePage === 'menu' && <Menu />}
         {activePage === 'loyalty' && <Loyalty />}
         {activePage === 'booking' && <Booking />}
-        {activePage === 'qrmenu' && <QrMenu setActivePage={setActivePage} />}
-        {activePage === 'visitus' && <VisitUs setActivePage={setActivePage} />}
+        {activePage === 'qrmenu' && <QrMenu setActivePage={navigateToPage} />}
+        {activePage === 'visitus' && <VisitUs setActivePage={navigateToPage} />}
         {activePage === 'admin' && (
           isAdminLoggedIn ? (
             <AdminDashboard 
               activeTab={adminTab} 
               setActiveTab={setAdminTab} 
-              onExit={() => setActivePage('home')}
+              onExit={() => navigateToPage('home')}
             />
           ) : (
             <div style={{ textAlign: 'center', padding: '100px 20px' }}>
@@ -158,13 +202,13 @@ export default function App() {
         )}
       </main>
 
-      <Footer setActivePage={setActivePage} />
+      <Footer setActivePage={navigateToPage} />
 
-      <MobileBottomNav 
-        activePage={activePage} 
-        setActivePage={setActivePage} 
-        adminTab={adminTab} 
-        setAdminTab={setAdminTab} 
+      <MobileBottomNav
+        activePage={activePage}
+        setActivePage={navigateToPage}
+        adminTab={adminTab}
+        setAdminTab={setAdminTab}
       />
 
       <AdminModal

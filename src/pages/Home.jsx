@@ -1,6 +1,6 @@
 import React from 'react';
-import { ArrowRight, Award, MapPin, Clock, QrCode, Phone } from 'lucide-react';
-import CustomerReviewsSlider from '../components/CustomerReviewsSlider';
+import { ArrowRight, Award, MapPin, Clock, Phone, MessageSquare, ExternalLink } from 'lucide-react';
+import CustomerReviewsSlider, { GMAPS_REVIEW_URL } from '../components/CustomerReviewsSlider';
 
 export default function Home({ setActivePage }) {
   return (
@@ -17,27 +17,30 @@ export default function Home({ setActivePage }) {
                 From fiery starters to fragrant mandi and pulavs. Experience rich traditions and heartwarming flavours in the heart of Kothapet.
               </p>
               <div className="hero-cta">
-                <button className="btn-primary" onClick={() => setActivePage('menu')} style={{ fontSize: '15px', padding: '14px 32px' }}>
+                <button className="btn-primary" onClick={() => setActivePage('menu')} style={{ fontSize: '15px', padding: '13px 28px' }}>
                   VIEW MENU <ArrowRight size={18} />
                 </button>
-                <button className="btn-secondary" onClick={() => setActivePage('loyalty')} style={{ fontSize: '15px', padding: '12px 28px' }}>
+                <button className="btn-secondary" onClick={() => setActivePage('loyalty')} style={{ fontSize: '15px', padding: '11px 24px' }}>
                   LOYALTY <Award size={18} />
                 </button>
+                <a
+                  href={GMAPS_REVIEW_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-gold"
+                  style={{ fontSize: '14px', padding: '12px 24px' }}
+                >
+                  <MessageSquare size={16} /> WRITE A REVIEW <ExternalLink size={13} style={{ opacity: 0.8 }} />
+                </a>
               </div>
             </div>
 
-            {/* Royal Highlight Card without images */}
-            <div className="food-visual-card" style={{ background: 'linear-gradient(135deg, rgba(6, 69, 45, 0.95), rgba(11, 91, 59, 0.95))', borderRadius: 'var(--radius-lg)', border: '1px solid var(--gold-green)', padding: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: 'var(--shadow-3d)' }}>
-              <div style={{ color: 'var(--gold-green)', fontSize: '11px', fontWeight: '800', letterSpacing: '0.15em', marginBottom: '8px' }}>THE DARBAR EXPERIENCE</div>
-              <h3 style={{ color: '#FFF', fontSize: '22px', fontWeight: '800', margin: '0 0 10px 0' }}>100% Pure Ghee & Natural Spices</h3>
-              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', lineHeight: '1.6', margin: 0 }}>
-                Every single dish at Dasari's Darbar is prepared fresh using slow-cooked traditional recipes, hand-ground masalas, and zero artificial colors.
-              </p>
-            </div>
+            {/* Hero Customer Reviews Carousel Card */}
+            <CustomerReviewsSlider variant="hero" />
           </div>
 
           {/* Quick Info Strip */}
-          <div className="quick-info-strip">
+          <div className="quick-info-strip" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             <div className="info-box">
               <div className="info-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Clock size={14} /> OPEN DAILY
@@ -61,15 +64,6 @@ export default function Home({ setActivePage }) {
                 <MapPin size={14} /> KOTHAPET
               </div>
               <div className="info-val">Hyderabad</div>
-            </div>
-
-            <div className="info-box" style={{ cursor: 'pointer' }} onClick={() => setActivePage('qrmenu')}>
-              <div className="info-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <QrCode size={14} /> TABLE QR
-              </div>
-              <div className="info-val" style={{ color: 'var(--brand-red)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                View menu <ArrowRight size={14} />
-              </div>
             </div>
           </div>
         </div>
@@ -182,9 +176,6 @@ export default function Home({ setActivePage }) {
 
         </div>
       </section>
-
-      {/* Customer Reviews Sliding Carousel */}
-      <CustomerReviewsSlider />
 
       {/* Rewards Banner */}
       <section className="section-cream">
