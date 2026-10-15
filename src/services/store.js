@@ -303,7 +303,11 @@ export const localStoreManager = {
 
   syncMenuWithRemote: async () => {
     try {
-      const backendUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || 'http://127.0.0.1:5001';
+      const backendUrl = (
+        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://127.0.0.1:5001'
+          : ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || 'https://dasarisdarbar.onrender.com')
+      );
       const res = await fetch(`${backendUrl}/api/menu`);
       if (!res.ok) return localStoreManager.getMenuItems();
       const json = await res.json();

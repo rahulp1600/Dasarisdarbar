@@ -21,6 +21,8 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 ocr-service/.env
+backend/data/admin_credentials.json
+backend/data/admin_sessions.json
 
 # Python artifacts
 __pycache__/

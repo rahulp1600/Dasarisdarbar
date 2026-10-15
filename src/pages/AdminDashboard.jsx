@@ -16,43 +16,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
   const activeTab = propActiveTab || internalTab;
   const setActiveTab = propSetActiveTab || setInternalTab;
 
-  const TABS = ['menu', 'claims', 'redemptions', 'offers', 'customers', 'bookings', 'settings'];
 
-  // Swipe gesture detection state
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-
-  const minSwipeDistance = 45;
-
-  const handleTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart({
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
-    });
-  };
-
-  const handleTouchMove = (e) => {
-    setTouchEnd({
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
-    });
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distanceX = touchStart.x - touchEnd.x;
-    const distanceY = touchStart.y - touchEnd.y;
-    if (Math.abs(distanceX) > Math.abs(distanceY) * 1.2 && Math.abs(distanceX) > minSwipeDistance) {
-      const isLeftSwipe = distanceX > 0;
-      const currentIndex = TABS.indexOf(activeTab);
-      if (isLeftSwipe) {
-        if (currentIndex < TABS.length - 1) setActiveTab(TABS[currentIndex + 1]);
-      } else {
-        if (currentIndex > 0) setActiveTab(TABS[currentIndex - 1]);
-      }
-    }
-  };
 
   useEffect(() => {
     const activeBtn = document.querySelector('.admin-nav-btn.active');
@@ -63,6 +27,42 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
 
   // --- STATE STORES ---
   const [menuItems, setMenuItems] = useState(dataStore.getMenuItems());
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategoryFilter, setMenuCategoryFilter] = useState('all');
+
+  useEffect(() => {
+    async function loadFreshAdminData() {
+      try {
+        const [menuRes, bookingsRes, offersRes, resOffersRes] = await Promise.allSettled([
+          dataStore.syncMenuWithRemote(),
+          backendApi.getBookings(),
+          backendApi.getOffers(),
+          backendApi.getAdminReservationOffers()
+        ]);
+
+        if (menuRes.status === 'fulfilled' && menuRes.value && menuRes.value.length > 0) {
+          setMenuItems(menuRes.value);
+        }
+
+        if (bookingsRes.status === 'fulfilled' && bookingsRes.value && bookingsRes.value.success && Array.isArray(bookingsRes.value.data)) {
+          setBookings(bookingsRes.value.data);
+          dataStore.saveBookings(bookingsRes.value.data);
+        }
+
+        if (offersRes.status === 'fulfilled' && offersRes.value && offersRes.value.success && Array.isArray(offersRes.value.data)) {
+          setOffers(offersRes.value.data);
+        }
+
+        if (resOffersRes.status === 'fulfilled' && resOffersRes.value && resOffersRes.value.success && Array.isArray(resOffersRes.value.data)) {
+          setReservationOffers(resOffersRes.value.data);
+          dataStore.saveReservationOffers(resOffersRes.value.data);
+        }
+      } catch (err) {
+        console.warn('Admin dashboard data sync error:', err.message);
+      }
+    }
+    loadFreshAdminData();
+  }, []);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ category: 'starters', name: '', description: '', price: '', tag: '', is_veg: false, is_available: true, image: null });
 
@@ -81,6 +81,27 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
     expiry_days: 30, 
     is_active: true 
   });
+
+  // Menu Item Price Editing State
+  const [editingPriceItemId, setEditingPriceItemId] = useState(null);
+  const [editPriceValue, setEditPriceValue] = useState('');
+  const [isPriceSaving, setIsPriceSaving] = useState(false);
+  const [priceMessage, setPriceMessage] = useState({ id: null, type: '', text: '' });
+
+  // Table Reservation Offers State
+  const [reservationOffers, setReservationOffers] = useState(dataStore.getReservationOffers());
+  const [isResOfferModalOpen, setIsResOfferModalOpen] = useState(false);
+  const [resOfferFormData, setResOfferFormData] = useState({
+    id: null,
+    title: '',
+    description: '',
+    discount_percentage: 10,
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+    active: true
+  });
+  const [resOfferError, setResOfferError] = useState('');
+  const [isResOfferSaving, setIsResOfferSaving] = useState(false);
 
   // Admin Credentials & Settings State (Rule 33)
   const [adminUser, setAdminUser] = useState(adminAuth.getCurrentUsername());
@@ -195,10 +216,22 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
 
 
   // --- HANDLERS FOR MENU ---
-  const handleToggleAvailable = (id) => {
-    const updated = menuItems.map(item => item.id === id ? { ...item, is_available: !item.is_available } : item);
-    setMenuItems(updated);
-    dataStore.saveMenuItems(updated);
+  const handleToggleAvailable = async (id) => {
+    const item = menuItems.find(m => m.id === id);
+    if (!item) return;
+    const newAvail = !item.is_available;
+    try {
+      const res = await backendApi.updateMenuItem(id, { is_available: newAvail, name: item.name }, adminUser);
+      if (res && res.success === false) {
+        alert(`Failed to update availability: ${res.message || 'Server error'}`);
+        return;
+      }
+      const updated = menuItems.map(item => item.id === id ? { ...item, is_available: newAvail } : item);
+      setMenuItems(updated);
+      dataStore.saveMenuItems(updated);
+    } catch (e) {
+      alert(`Error updating availability: ${e.message}`);
+    }
   };
 
   const handleDeleteItem = (id) => {
@@ -214,6 +247,163 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
       const restored = dataStore.resetMenuItems();
       setMenuItems(restored);
       alert('Master Menu restored successfully with all dishes!');
+    }
+  };
+
+  // --- MENU ITEM PRICE EDITING HANDLERS ---
+  const handleStartEditPrice = (item) => {
+    setEditingPriceItemId(item.id);
+    setEditPriceValue(item.price !== null && item.price !== undefined ? String(item.price) : '');
+    setPriceMessage({ id: null, type: '', text: '' });
+  };
+
+  const handleCancelEditPrice = () => {
+    setEditingPriceItemId(null);
+    setEditPriceValue('');
+    setPriceMessage({ id: null, type: '', text: '' });
+  };
+
+  const handleSavePrice = async (itemId) => {
+    const val = editPriceValue.trim();
+    if (val === '') {
+      setPriceMessage({ id: itemId, type: 'error', text: 'Price cannot be empty.' });
+      return;
+    }
+    const numPrice = Number(val);
+    if (isNaN(numPrice) || numPrice < 0) {
+      setPriceMessage({ id: itemId, type: 'error', text: 'Please enter a valid price (>= 0).' });
+      return;
+    }
+
+    setIsPriceSaving(true);
+    setPriceMessage({ id: itemId, type: 'saving', text: 'Saving price to database...' });
+
+    try {
+      const targetItem = menuItems.find(m => m.id === itemId);
+      const res = await backendApi.updateMenuItemPrice(itemId, numPrice, adminUser, targetItem?.name);
+      if (res && res.success === false) {
+        throw new Error(res.message || 'Server rejected price update.');
+      }
+      const updatedMenu = dataStore.updateMenuItemPrice(itemId, numPrice);
+      setMenuItems(updatedMenu);
+
+      setIsPriceSaving(false);
+      setEditingPriceItemId(null);
+      setPriceMessage({ id: itemId, type: 'success', text: `Saved ₹${numPrice}` });
+      setTimeout(() => setPriceMessage({ id: null, type: '', text: '' }), 3500);
+    } catch (err) {
+      setIsPriceSaving(false);
+      setPriceMessage({ id: itemId, type: 'error', text: `Failed to save: ${err.message || 'Database error'}` });
+    }
+  };
+
+  // --- TABLE RESERVATION OFFERS HANDLERS ---
+  const handleOpenAddResOffer = () => {
+    setResOfferFormData({
+      id: null,
+      title: '',
+      description: '',
+      discount_percentage: 10,
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+      active: true
+    });
+    setResOfferError('');
+    setIsResOfferModalOpen(true);
+  };
+
+  const handleOpenEditResOffer = (offer) => {
+    setResOfferFormData({
+      id: offer.id,
+      title: offer.title,
+      description: offer.description || '',
+      discount_percentage: offer.discount_percentage !== undefined ? offer.discount_percentage : 10,
+      start_date: offer.start_date || new Date().toISOString().split('T')[0],
+      end_date: offer.end_date || new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+      active: offer.active !== false
+    });
+    setResOfferError('');
+    setIsResOfferModalOpen(true);
+  };
+
+  const handleSaveResOffer = async (e) => {
+    e.preventDefault();
+    if (!resOfferFormData.title || !resOfferFormData.title.trim()) {
+      setResOfferError('Offer title is required.');
+      return;
+    }
+    const discount = Number(resOfferFormData.discount_percentage);
+    if (isNaN(discount) || discount < 0 || discount > 100) {
+      setResOfferError('Discount percentage must be a valid number between 0 and 100.');
+      return;
+    }
+    if (resOfferFormData.start_date && resOfferFormData.end_date && resOfferFormData.start_date > resOfferFormData.end_date) {
+      setResOfferError('Start date cannot be after end date.');
+      return;
+    }
+
+    setIsResOfferSaving(true);
+    setResOfferError('');
+
+    const payload = {
+      ...resOfferFormData,
+      title: resOfferFormData.title.trim(),
+      discount_percentage: discount,
+      adminUser
+    };
+
+    try {
+      const res = await backendApi.saveReservationOffer(payload);
+      let updated;
+      if (resOfferFormData.id) {
+        updated = dataStore.updateReservationOffer(resOfferFormData.id, payload);
+      } else {
+        dataStore.addReservationOffer({
+          ...payload,
+          id: res?.offer?.id || ('roffer_' + Date.now())
+        });
+        updated = dataStore.getReservationOffers();
+      }
+      setReservationOffers(updated);
+      setIsResOfferModalOpen(false);
+      setIsResOfferSaving(false);
+    } catch (err) {
+      let updated;
+      if (resOfferFormData.id) {
+        updated = dataStore.updateReservationOffer(resOfferFormData.id, payload);
+      } else {
+        dataStore.addReservationOffer({ ...payload, id: 'roffer_' + Date.now() });
+        updated = dataStore.getReservationOffers();
+      }
+      setReservationOffers(updated);
+      setIsResOfferModalOpen(false);
+      setIsResOfferSaving(false);
+    }
+  };
+
+  const handleToggleResOfferActive = async (id) => {
+    const target = reservationOffers.find(o => o.id === id);
+    const newActive = target ? !target.active : true;
+    const updated = dataStore.toggleReservationOfferActive(id);
+    setReservationOffers(updated);
+
+    try {
+      await backendApi.toggleReservationOfferStatus(id, newActive, adminUser);
+    } catch (e) {
+      console.warn('Backend toggle reservation offer error:', e.message);
+    }
+  };
+
+  const handleDeleteResOffer = async (id) => {
+    if (window.confirm('Are you sure you want to delete this table reservation offer?')) {
+      const updated = dataStore.deleteReservationOffer(id);
+      setReservationOffers(updated);
+
+      try {
+        await backendApi.deleteReservationOffer(id, adminUser);
+      } catch (e) {
+        console.warn('Backend delete reservation offer error:', e.message);
+      }
     }
   };
 
@@ -247,16 +437,52 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
   };
 
   // --- HANDLERS FOR BOOKINGS ---
-  const handleBookingStatus = (id, newStatus) => {
-    const updated = bookings.map(b => b.id === id ? { ...b, status: newStatus } : b);
-    setBookings(updated);
-    dataStore.saveBookings(updated);
+  const handleBookingStatus = async (id, newStatus) => {
+    try {
+      const res = await backendApi.updateBookingStatus(id, newStatus, adminUser);
+      if (res && res.success === false) {
+        alert(`Failed to update booking status: ${res.message || 'Server error'}`);
+        return;
+      }
+      const updated = bookings.map(b => b.id === id ? { ...b, status: newStatus } : b);
+      setBookings(updated);
+      dataStore.saveBookings(updated);
+    } catch (e) {
+      alert(`Error updating booking status: ${e.message}`);
+    }
+  };
+
+  const handleDeleteBooking = async (id) => {
+    if (window.confirm('Are you sure you want to delete this table reservation?')) {
+      try {
+        const res = await backendApi.deleteBooking(id, adminUser);
+        if (res && res.success === false) {
+          alert(`Failed to delete booking: ${res.message || 'Server error'}`);
+          return;
+        }
+        const updated = dataStore.deleteBooking(id);
+        setBookings(updated);
+      } catch (e) {
+        alert(`Backend delete booking error: ${e.message}`);
+      }
+    }
   };
 
   // --- HANDLERS FOR LOYALTY OFFERS (Rule 7 & 31) ---
-  const handleToggleOffer = (id) => {
-    const updated = loyaltyEngine.toggleOfferActive(id);
-    setOffers(updated);
+  const handleToggleOffer = async (id) => {
+    const target = offers.find(o => o.id === id);
+    const newActive = target ? !(target.is_active !== undefined ? target.is_active : target.active) : false;
+    try {
+      const res = await backendApi.toggleOfferStatus(id, newActive, adminUser);
+      if (res && res.success === false) {
+        alert(`Failed to toggle offer status: ${res.message || 'Server error'}`);
+        return;
+      }
+      const updated = loyaltyEngine.toggleOfferActive(id);
+      setOffers(updated);
+    } catch (e) {
+      alert(`Error toggling offer status: ${e.message}`);
+    }
   };
 
   const handleOpenAddOffer = () => {
@@ -287,59 +513,80 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
     setIsOfferModalOpen(true);
   };
 
-  const handleSaveOffer = (e) => {
+  const handleSaveOffer = async (e) => {
     e.preventDefault();
     if (!offerFormData.name.trim()) {
       alert('Please enter an offer name.');
       return;
     }
 
-    if (offerFormData.id) {
-      const updated = loyaltyEngine.updateOffer(offerFormData.id, {
-        name: offerFormData.name.trim(),
-        type: offerFormData.type,
-        discount_percent: offerFormData.type === 'percentage_discount' ? Number(offerFormData.discount_percent) : null,
-        max_discount: offerFormData.type === 'percentage_discount' ? Number(offerFormData.max_discount) : null,
-        description: offerFormData.description.trim(),
-        expiry_days: Number(offerFormData.expiry_days) || 30,
-        is_active: offerFormData.is_active
-      });
-      setOffers(updated);
-    } else {
-      loyaltyEngine.addOffer({
-        name: offerFormData.name.trim(),
-        type: offerFormData.type,
-        discount_percent: offerFormData.type === 'percentage_discount' ? Number(offerFormData.discount_percent) : null,
-        max_discount: offerFormData.type === 'percentage_discount' ? Number(offerFormData.max_discount) : null,
-        description: offerFormData.description.trim(),
-        expiry_days: Number(offerFormData.expiry_days) || 30
-      });
-      setOffers(loyaltyEngine.getOffers());
-    }
+    const payload = {
+      id: offerFormData.id,
+      title: offerFormData.name.trim(),
+      name: offerFormData.name.trim(),
+      type: offerFormData.type,
+      discount_type: offerFormData.type === 'percentage_discount' ? 'percent' : 'free_item',
+      discount_percent: offerFormData.type === 'percentage_discount' ? Number(offerFormData.discount_percent) : null,
+      max_discount: offerFormData.type === 'percentage_discount' ? Number(offerFormData.max_discount) : null,
+      description: offerFormData.description.trim(),
+      expiry_days: Number(offerFormData.expiry_days) || 30,
+      is_active: offerFormData.is_active,
+      active: offerFormData.is_active,
+      adminUser
+    };
 
-    setIsOfferModalOpen(false);
+    try {
+      const res = await backendApi.saveOffer(payload);
+      if (res && res.success === false) {
+        alert(`Failed to save offer: ${res.message || 'Server error'}`);
+        return;
+      }
+
+      if (offerFormData.id) {
+        const updated = loyaltyEngine.updateOffer(offerFormData.id, payload);
+        setOffers(updated);
+      } else {
+        loyaltyEngine.addOffer({
+          ...payload,
+          id: res?.offer?.id || payload.id
+        });
+        setOffers(loyaltyEngine.getOffers());
+      }
+      setIsOfferModalOpen(false);
+    } catch (err) {
+      alert(`Error saving offer: ${err.message}`);
+    }
   };
 
-  const handleDeleteOffer = (id) => {
+  const handleDeleteOffer = async (id) => {
     if (window.confirm('Are you sure you want to delete this offer from the active pool?')) {
-      const updated = loyaltyEngine.deleteOffer(id);
-      setOffers(updated);
+      try {
+        const res = await backendApi.deleteOffer(id, adminUser);
+        if (res && res.success === false) {
+          alert(`Failed to delete offer: ${res.message || 'Server error'}`);
+          return;
+        }
+        const updated = loyaltyEngine.deleteOffer(id);
+        setOffers(updated);
+      } catch (e) {
+        alert(`Error deleting offer: ${e.message}`);
+      }
     }
   };
 
   // --- HANDLER FOR ADMIN CREDENTIALS CHANGE (Rule 33) ---
-  const handleChangeAdminCredentials = (e) => {
+  const handleChangeAdminCredentials = async (e) => {
     e.preventDefault();
     setAdminCredsStatus({ type: '', message: '' });
 
-    const result = adminAuth.changeCredentials({
+    const result = await adminAuth.changeCredentials({
       currentPassword: adminCredsForm.currentPassword,
       newUsername: adminCredsForm.newUsername,
       newPassword: adminCredsForm.newPassword,
       confirmPassword: adminCredsForm.confirmPassword
     });
 
-    if (result.success) {
+    if (result && result.success) {
       setAdminCredsStatus({ type: 'success', message: result.message });
       setAdminUser(adminAuth.getCurrentUsername());
       setAdminCredsForm({
@@ -349,7 +596,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         confirmPassword: ''
       });
     } else {
-      setAdminCredsStatus({ type: 'error', message: result.message });
+      setAdminCredsStatus({ type: 'error', message: result?.message || 'Failed to update credentials.' });
     }
   };
 
@@ -472,9 +719,6 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
   return (
     <div 
       style={{ background: '#F8F9FA', minHeight: '90vh', paddingBottom: '90px' }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
     >
       {/* Admin Header */}
       <div className="admin-header">
@@ -578,10 +822,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
             </div>
           </div>
 
-          {/* Swipe guide on mobile */}
-          <div className="admin-swipe-hint">
-            👈 Swipe left / right anywhere on screen to switch tabs 👉
-          </div>
+
 
           {/* Tab Navigation */}
           <div className="admin-nav">
@@ -617,6 +858,10 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
 
             <button className={`admin-nav-btn ${activeTab === 'offers' ? 'active' : ''}`} onClick={() => setActiveTab('offers')}>
               <Gift size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> LOYALTY OFFERS ({offers.length})
+            </button>
+
+            <button className={`admin-nav-btn ${activeTab === 'reservation_offers' ? 'active' : ''}`} onClick={() => setActiveTab('reservation_offers')}>
+              <Tag size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> RESERVATION OFFERS ({reservationOffers.length})
             </button>
 
             <button className={`admin-nav-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}>
@@ -810,6 +1055,68 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                 </button>
               </div>
 
+              {/* Search and Category Filter Bar */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '200px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-grey)' }} />
+                  <input
+                    type="text"
+                    value={menuSearch}
+                    onChange={(e) => setMenuSearch(e.target.value)}
+                    placeholder="Search dishes by name or category..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px 8px 36px',
+                      borderRadius: '8px',
+                      border: '1px solid #CFD8DC',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+                <div style={{ minWidth: '160px' }}>
+                  <select
+                    value={menuCategoryFilter}
+                    onChange={(e) => setMenuCategoryFilter(e.target.value)}
+                    className="form-select"
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CFD8DC',
+                      fontSize: '13px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    <option value="all">All Categories</option>
+                    <option value="starters">Starters</option>
+                    <option value="mains">Curries & Mains</option>
+                    <option value="breads">Rotis & Breads</option>
+                    <option value="pulavs">Pulavs & Biryanis</option>
+                    <option value="mandi">Mandi Specialities</option>
+                    <option value="desserts">Desserts</option>
+                    <option value="beverages">Beverages</option>
+                  </select>
+                </div>
+                {(menuSearch || menuCategoryFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => { setMenuSearch(''); setMenuCategoryFilter('all'); }}
+                    style={{
+                      background: '#ECEFF1',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      color: '#455A64'
+                    }}
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+
               <div style={{ overflowX: 'auto' }}>
                 <table className="admin-table">
                   <thead>
@@ -825,7 +1132,14 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                     </tr>
                   </thead>
                   <tbody>
-                    {menuItems.map(item => (
+                    {menuItems
+                      .filter(item => {
+                        const q = menuSearch.trim().toLowerCase();
+                        const matchSearch = !q || item.name?.toLowerCase().includes(q) || item.category?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q);
+                        const matchCat = menuCategoryFilter === 'all' || item.category === menuCategoryFilter;
+                        return matchSearch && matchCat;
+                      })
+                      .map(item => (
                       <tr key={item.id} style={{ opacity: item.is_available ? 1 : 0.6 }}>
                         <td>
                           {item.image ? (
@@ -873,7 +1187,124 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                           {item.category}
                         </td>
                         <td style={{ fontWeight: '700', color: 'var(--ink)' }}>{item.name}</td>
-                        <td style={{ fontWeight: '700' }}>{item.price ? `₹${item.price}` : 'On Request'}</td>
+                        <td style={{ fontWeight: '700', minWidth: '160px' }}>
+                          {editingPriceItemId === item.id ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span style={{ fontSize: '13px', color: 'var(--muted-grey)' }}>₹</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editPriceValue}
+                                  onChange={(e) => setEditPriceValue(e.target.value)}
+                                  disabled={isPriceSaving}
+                                  placeholder="Price"
+                                  style={{
+                                    width: '75px',
+                                    padding: '4px 6px',
+                                    fontSize: '13px',
+                                    fontWeight: '700',
+                                    border: '1.5px solid var(--deep-green)',
+                                    borderRadius: '4px',
+                                    background: '#FFF'
+                                  }}
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSavePrice(item.id);
+                                    if (e.key === 'Escape') handleCancelEditPrice();
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavePrice(item.id)}
+                                  disabled={isPriceSaving}
+                                  style={{
+                                    background: 'var(--deep-green)',
+                                    color: '#FFF',
+                                    border: 'none',
+                                    padding: '5px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    cursor: isPriceSaving ? 'not-allowed' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                  title="Save price"
+                                >
+                                  <Save size={12} /> Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditPrice}
+                                  disabled={isPriceSaving}
+                                  style={{
+                                    background: '#ECEFF1',
+                                    color: '#455A64',
+                                    border: 'none',
+                                    padding: '5px 7px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Cancel"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                              {priceMessage.id === item.id && (
+                                <div style={{
+                                  fontSize: '11px',
+                                  marginTop: '3px',
+                                  color: priceMessage.type === 'error' ? '#C62828' : priceMessage.type === 'saving' ? '#E65100' : '#2E7D32',
+                                  fontWeight: '700'
+                                }}>
+                                  {priceMessage.text}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '14px' }}>
+                                  {item.price !== null && item.price !== undefined ? `₹${item.price}` : 'On Request'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditPrice(item)}
+                                  style={{
+                                    background: 'rgba(6, 69, 45, 0.08)',
+                                    border: '1px solid rgba(6, 69, 45, 0.2)',
+                                    color: 'var(--deep-green)',
+                                    cursor: 'pointer',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    fontSize: '11px',
+                                    fontWeight: '700'
+                                  }}
+                                  title="Edit Price"
+                                >
+                                  <Edit2 size={11} /> Edit
+                                </button>
+                              </div>
+                              {priceMessage.id === item.id && (
+                                <div style={{
+                                  fontSize: '11px',
+                                  marginTop: '3px',
+                                  color: priceMessage.type === 'error' ? '#C62828' : '#2E7D32',
+                                  fontWeight: '700'
+                                }}>
+                                  {priceMessage.text}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
                         <td>
                           {item.tag && (
                             <span style={{ background: 'var(--brand-red)', color: '#FFF', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>
@@ -898,10 +1329,36 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                             {item.is_available ? 'IN STOCK' : 'SOLD OUT'}
                           </button>
                         </td>
-                        <td>
-                          <button style={{ background: 'none', color: '#C62828', cursor: 'pointer', border: 'none' }} onClick={() => handleDeleteItem(item.id)}>
-                            <Trash2 size={16} />
-                          </button>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditPrice(item)}
+                              style={{
+                                background: '#E8F5E9',
+                                color: '#2E7D32',
+                                border: '1px solid #C8E6C9',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Edit price for this dish"
+                            >
+                              <Edit2 size={12} /> Edit Price
+                            </button>
+                            <button
+                              style={{ background: 'none', color: '#C62828', cursor: 'pointer', border: 'none', padding: '4px' }}
+                              onClick={() => handleDeleteItem(item.id)}
+                              title="Delete dish"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1630,6 +2087,213 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         )}
 
         {/* ========================================================================= */}
+        {/* TAB: TABLE RESERVATION OFFERS */}
+        {/* ========================================================================= */}
+        {activeTab === 'reservation_offers' && (
+          <div>
+            <div style={{
+              background: 'var(--white)',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: 'var(--shadow-sm)',
+              marginBottom: '24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              <div>
+                <h3 style={{ fontSize: '20px', color: 'var(--deep-green)', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Tag size={20} /> Table Reservation Offers
+                </h3>
+                <p style={{ margin: 0, color: 'var(--muted-grey)', fontSize: '14px' }}>
+                  Manage promotional offers displayed to customers reserving dine-in tables. Only active offers within valid date windows are presented at booking.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenAddResOffer}
+                className="btn-primary"
+                style={{ padding: '10px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={16} /> Create New Reservation Offer
+              </button>
+            </div>
+
+            {/* Offers Table */}
+            <div style={{ background: 'var(--white)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Offer Title</th>
+                      <th>Discount</th>
+                      <th>Description</th>
+                      <th>Validity Window</th>
+                      <th>Booking Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reservationOffers.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--muted-grey)' }}>
+                          No table reservation offers found. Click "Create New Reservation Offer" to add one.
+                        </td>
+                      </tr>
+                    ) : (
+                      reservationOffers.map(offer => {
+                        const today = new Date().toISOString().split('T')[0];
+                        const isExpired = offer.end_date && offer.end_date < today;
+                        const isUpcoming = offer.start_date && offer.start_date > today;
+                        const isCurrentlyValid = offer.active && !isExpired && !isUpcoming;
+
+                        return (
+                          <tr key={offer.id} style={{ opacity: offer.active ? 1 : 0.65 }}>
+                            <td>
+                              <div style={{ fontWeight: '800', color: 'var(--ink)', fontSize: '14px' }}>
+                                {offer.title}
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{
+                                background: '#E65100',
+                                color: '#FFF',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '900'
+                              }}>
+                                {offer.discount_percentage}% OFF
+                              </span>
+                            </td>
+                            <td style={{ maxWidth: '300px', fontSize: '13px', color: '#555', lineHeight: 1.4 }}>
+                              {offer.description || '—'}
+                            </td>
+                            <td style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: '600' }}>From: {offer.start_date || 'Immediate'}</div>
+                              <div style={{ color: isExpired ? '#C62828' : 'var(--muted-grey)', fontWeight: isExpired ? '700' : 'normal' }}>
+                                Until: {offer.end_date || 'No Expiry'}
+                              </div>
+                            </td>
+                            <td>
+                              {isCurrentlyValid ? (
+                                <span style={{
+                                  background: '#E8F5E9',
+                                  color: '#2E7D32',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: '800'
+                                }}>
+                                  ACTIVE (LIVE AT BOOKING)
+                                </span>
+                              ) : isExpired ? (
+                                <span style={{
+                                  background: '#FFEBEE',
+                                  color: '#C62828',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: '800'
+                                }}>
+                                  EXPIRED
+                                </span>
+                              ) : isUpcoming ? (
+                                <span style={{
+                                  background: '#E3F2FD',
+                                  color: '#1565C0',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: '800'
+                                }}>
+                                  UPCOMING
+                                </span>
+                              ) : (
+                                <span style={{
+                                  background: '#ECEFF1',
+                                  color: '#546E7A',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: '800'
+                                }}>
+                                  INACTIVE
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleResOfferActive(offer.id)}
+                                  style={{
+                                    background: offer.active ? '#FFF3E0' : '#E8F5E9',
+                                    color: offer.active ? '#E65100' : '#2E7D32',
+                                    border: 'none',
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer'
+                                  }}
+                                  title={offer.active ? 'Deactivate offer' : 'Activate offer'}
+                                >
+                                  {offer.active ? 'Deactivate' : 'Activate'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditResOffer(offer)}
+                                  style={{
+                                    background: '#ECEFF1',
+                                    color: '#37474F',
+                                    border: 'none',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="Edit offer"
+                                >
+                                  <Edit2 size={12} /> Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteResOffer(offer.id)}
+                                  style={{
+                                    background: 'none',
+                                    color: '#C62828',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '4px'
+                                  }}
+                                  title="Delete offer"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* TAB 7: ADMIN SETTINGS (Daily Bill Sequence & Owner Credentials) */}
         {/* ========================================================================= */}
         {activeTab === 'settings' && (
@@ -2038,35 +2702,95 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                   <th>Time Slot</th>
                   <th>Notes / Request</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {bookings.map(b => (
-                  <tr key={b.id}>
-                    <td>
-                      <span style={{ background: 'var(--deep-green)', color: 'var(--gold-white)', padding: '6px 12px', borderRadius: '16px', fontWeight: '900', fontSize: '13px' }}>
-                        Table #{b.table_number || 1}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: '700' }}>{b.name}</td>
-                    <td>{b.phone}</td>
-                    <td>{b.party_size} Guests</td>
-                    <td style={{ fontWeight: '700', color: 'var(--gold-white)' }}>{b.booking_time || '19:30'}</td>
-                    <td style={{ fontSize: '13px', color: '#666' }}>{b.notes || '—'}</td>
-                    <td>
-                      <select
-                        className="form-select"
-                        style={{ padding: '4px 8px', fontSize: '12px', fontWeight: '700' }}
-                        value={b.status}
-                        onChange={(e) => handleBookingStatus(b.id, e.target.value)}
-                      >
-                        <option value="confirmed">Confirmed</option>
-                        <option value="pending">Pending</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
+                {bookings.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--muted-grey)' }}>
+                      No table reservations currently found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  bookings.map(b => (
+                    <tr key={b.id}>
+                      <td>
+                        <span style={{ background: 'var(--deep-green)', color: 'var(--gold-white)', padding: '6px 12px', borderRadius: '16px', fontWeight: '900', fontSize: '13px' }}>
+                          Table #{b.table_number || 1}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: '700' }}>{b.name}</td>
+                      <td>{b.phone}</td>
+                      <td>{b.party_size} Guests</td>
+                      <td style={{ fontWeight: '700', color: 'var(--deep-green)' }}>
+                        {b.booking_date ? `${b.booking_date} · ${b.booking_time || '19:30'}` : (b.booking_time || '19:30')}
+                      </td>
+                      <td style={{ fontSize: '13px', color: '#555', maxWidth: '280px' }}>
+                        <div>{b.notes || '—'}</div>
+                        {b.offer_title && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span style={{
+                              background: '#FFF3E0',
+                              color: '#E65100',
+                              border: '1px solid #FFE0B2',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <Tag size={10} /> Offer: {b.offer_title} ({b.offer_discount_percentage}% OFF)
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            background: b.status === 'confirmed' ? '#E8F5E9' : b.status === 'pending' ? '#FFF3E0' : '#FFEBEE',
+                            color: b.status === 'confirmed' ? '#2E7D32' : b.status === 'pending' ? '#E65100' : '#C62828',
+                            borderColor: b.status === 'confirmed' ? '#A5D6A7' : b.status === 'pending' ? '#FFE082' : '#FFCDD2'
+                          }}
+                          value={b.status || 'pending'}
+                          onChange={(e) => handleBookingStatus(b.id, e.target.value)}
+                        >
+                          <option value="pending">Pending Request</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBooking(b.id)}
+                          style={{
+                            background: '#FFEBEE',
+                            color: '#C62828',
+                            border: '1px solid #FFCDD2',
+                            borderRadius: '6px',
+                            padding: '5px 10px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Delete this reservation"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -2597,6 +3321,154 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit Reservation Offer Modal */}
+      {isResOfferModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFF',
+            borderRadius: '12px',
+            maxWidth: '520px',
+            width: '100%',
+            padding: '28px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            position: 'relative'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--deep-green)', margin: 0, fontWeight: '800' }}>
+                {resOfferFormData.id ? 'Edit Table Reservation Offer' : 'Create Table Reservation Offer'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsResOfferModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {resOfferError && (
+              <div style={{
+                background: '#FFEBEE',
+                color: '#C62828',
+                border: '1px solid #FFCDD2',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                marginBottom: '16px'
+              }}>
+                {resOfferError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveResOffer}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Offer Title *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Family Feast Dine-In Special"
+                  value={resOfferFormData.title}
+                  onChange={(e) => setResOfferFormData({ ...resOfferFormData, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Discount Percentage (%) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  className="form-input"
+                  placeholder="e.g. 15"
+                  value={resOfferFormData.discount_percentage}
+                  onChange={(e) => setResOfferFormData({ ...resOfferFormData, discount_percentage: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Offer Description</label>
+                <textarea
+                  className="form-textarea"
+                  rows="2"
+                  placeholder="e.g. 15% promotional dining benefit on your reserved table for parties of 4 or more."
+                  value={resOfferFormData.description}
+                  onChange={(e) => setResOfferFormData({ ...resOfferFormData, description: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Start Date *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={resOfferFormData.start_date}
+                    onChange={(e) => setResOfferFormData({ ...resOfferFormData, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">End Date *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={resOfferFormData.end_date}
+                    onChange={(e) => setResOfferFormData({ ...resOfferFormData, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+                  <input
+                    type="checkbox"
+                    checked={resOfferFormData.active}
+                    onChange={(e) => setResOfferFormData({ ...resOfferFormData, active: e.target.checked })}
+                  />
+                  Offer Active (Live for eligible new bookings)
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsResOfferModalOpen(false)}
+                  style={{ padding: '10px 18px', fontSize: '13px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isResOfferSaving}
+                  style={{ padding: '10px 22px', fontSize: '13px' }}
+                >
+                  {isResOfferSaving ? 'Saving...' : resOfferFormData.id ? 'Save Changes' : 'Create Offer'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

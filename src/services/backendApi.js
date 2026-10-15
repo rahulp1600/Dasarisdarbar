@@ -1,6 +1,7 @@
 /**
  * Frontend API Service for Dasari Darbar Backend
  * Connects React UI to Node.js / Express Backend (which coordinates Python OCR & Supabase)
+ * Fully supports HttpOnly secure session cookies & CSRF protection
  */
 
 const BACKEND_URL = (
@@ -8,6 +9,39 @@ const BACKEND_URL = (
     ? 'http://127.0.0.1:5001'
     : (import.meta.env.VITE_BACKEND_URL || 'https://dasarisdarbar.onrender.com')
 );
+
+let currentCsrfToken = null;
+
+export function setCsrfToken(token) {
+  currentCsrfToken = token;
+}
+
+export function getCsrfToken() {
+  return currentCsrfToken;
+}
+
+/**
+ * Internal helper for authenticated Admin API calls
+ */
+async function adminFetch(endpoint, options = {}) {
+  const url = `${BACKEND_URL}${endpoint}`;
+  const headers = {
+    ...(options.headers || {}),
+    ...(currentCsrfToken ? { 'x-csrf-token': currentCsrfToken } : {})
+  };
+
+  if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+
+  return response;
+}
 
 export const backendApi = {
   baseUrl: BACKEND_URL,
@@ -23,6 +57,72 @@ export const backendApi = {
       return { status: 'offline', error: e.message };
     }
   },
+
+  // --- ADMIN AUTHENTICATION & SESSIONS ---
+
+  async adminLogin(username, password) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data && data.success && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+      }
+      return data;
+    } catch (e) {
+      return { success: false, message: 'Could not connect to authentication server.' };
+    }
+  },
+
+  async checkAdminSession() {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/session`, {
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data && data.authenticated && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+      }
+      return data;
+    } catch (e) {
+      return { authenticated: false };
+    }
+  },
+
+  async adminLogout() {
+    try {
+      const res = await adminFetch('/api/admin/logout', {
+        method: 'POST'
+      });
+      setCsrfToken(null);
+      return await res.json();
+    } catch (e) {
+      setCsrfToken(null);
+      return { success: true };
+    }
+  },
+
+  async changeAdminCredentials(payload) {
+    try {
+      const res = await adminFetch('/api/admin/change-credentials', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data && data.success && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+      }
+      return data;
+    } catch (e) {
+      return { success: false, message: 'Server error updating credentials: ' + e.message };
+    }
+  },
+
+  // --- LOYALTY CUSTOMER APIS ---
 
   async getLoyaltyStatus(customerId) {
     try {
@@ -40,7 +140,6 @@ export const backendApi = {
   async claimBill({ customerId, customerName, imageBase64, file }) {
     const url = `${BACKEND_URL}/api/loyalty/claim`;
     const controller = new AbortController();
-    // 90 second timeout allows Render free tier cold-starts and Tesseract processing
     const timeoutId = setTimeout(() => controller.abort(), 90000);
 
     try {
@@ -120,13 +219,11 @@ export const backendApi = {
 
   async redeemVoucher({ voucherCode, staffIdentifier = 'Staff Cashier' }) {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/redeem`, {
+      const res = await adminFetch('/api/admin/redeem', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voucherCode, staffIdentifier })
       });
-      const data = await res.json();
-      return data;
+      return await res.json();
     } catch (e) {
       return {
         success: false,
@@ -138,7 +235,7 @@ export const backendApi = {
 
   async getVerifiedBills() {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/verified-bills`);
+      const res = await adminFetch('/api/admin/verified-bills');
       return res.ok ? await res.json() : { success: false, data: [] };
     } catch (e) {
       return { success: false, data: [] };
@@ -147,7 +244,7 @@ export const backendApi = {
 
   async getAuditLogs() {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/audit-logs`);
+      const res = await adminFetch('/api/admin/audit-logs');
       return res.ok ? await res.json() : { success: false, data: [] };
     } catch (e) {
       return { success: false, data: [] };
@@ -156,7 +253,7 @@ export const backendApi = {
 
   async getAdminClaims() {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/claims`);
+      const res = await adminFetch('/api/admin/claims');
       return res.ok ? await res.json() : { success: false, data: [] };
     } catch (e) {
       return { success: false, data: [] };
@@ -166,9 +263,9 @@ export const backendApi = {
   async getDailySequence(date) {
     try {
       const url = date 
-        ? `${BACKEND_URL}/api/admin/daily-sequence?date=${encodeURIComponent(date)}`
-        : `${BACKEND_URL}/api/admin/daily-sequence`;
-      const res = await fetch(url);
+        ? `/api/admin/daily-sequence?date=${encodeURIComponent(date)}`
+        : `/api/admin/daily-sequence`;
+      const res = await adminFetch(url);
       return res.ok ? await res.json() : { success: false, isConfigured: false, warning: "Today's bill sequence is not set." };
     } catch (e) {
       return { success: false, isConfigured: false, warning: "Today's bill sequence is not set." };
@@ -177,9 +274,8 @@ export const backendApi = {
 
   async setDailySequence({ businessDate, firstBillNumber, adminUser, confirmOverride = false }) {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/daily-sequence`, {
+      const res = await adminFetch('/api/admin/daily-sequence', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ businessDate, firstBillNumber, adminUser, confirmOverride })
       });
       return await res.json();
@@ -190,7 +286,7 @@ export const backendApi = {
 
   async getOffers() {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/offers`);
+      const res = await adminFetch('/api/admin/offers');
       return res.ok ? await res.json() : { success: false, data: [] };
     } catch (e) {
       return { success: false, data: [] };
@@ -199,17 +295,188 @@ export const backendApi = {
 
   async saveOffer(offerData) {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/offers`, {
+      const res = await adminFetch('/api/admin/offers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(offerData)
       });
       return await res.json();
     } catch (e) {
       return { success: false, message: 'Could not save offer: ' + e.message };
     }
+  },
+
+  async toggleOfferStatus(id, active, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/offers/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active, adminUser })
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not toggle offer status: ' + e.message };
+    }
+  },
+
+  async deleteOffer(id, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/offers/${encodeURIComponent(id)}?adminUser=${encodeURIComponent(adminUser)}`, {
+        method: 'DELETE'
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not delete offer: ' + e.message };
+    }
+  },
+
+  // --- PUBLIC & ADMIN TABLE RESERVATION OFFERS ---
+
+  async getActiveReservationOffers() {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/reservation-offers`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) return json.data;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Backend getActiveReservationOffers fallback:', e.message);
+      return null;
+    }
+  },
+
+  async getAdminReservationOffers() {
+    try {
+      const res = await adminFetch('/api/admin/reservation-offers');
+      return res.ok ? await res.json() : { success: false, data: [] };
+    } catch (e) {
+      return { success: false, data: [] };
+    }
+  },
+
+  async saveReservationOffer(offerData) {
+    try {
+      const res = await adminFetch('/api/admin/reservation-offers', {
+        method: 'POST',
+        body: JSON.stringify(offerData)
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not save reservation offer: ' + e.message };
+    }
+  },
+
+  async toggleReservationOfferStatus(id, active, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/reservation-offers/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active, adminUser })
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not toggle reservation offer status: ' + e.message };
+    }
+  },
+
+  async deleteReservationOffer(id, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/reservation-offers/${encodeURIComponent(id)}?adminUser=${encodeURIComponent(adminUser)}`, {
+        method: 'DELETE'
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not delete reservation offer: ' + e.message };
+    }
+  },
+
+  // --- MENU MANAGEMENT ---
+
+  async getMenu() {
+    try {
+      const res = await adminFetch('/api/admin/menu');
+      return res.ok ? await res.json() : { success: false, data: [] };
+    } catch (e) {
+      return { success: false, data: [] };
+    }
+  },
+
+  async updateMenuItem(id, updates, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/menu/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...updates, adminUser })
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not reach server to update menu item: ' + e.message };
+    }
+  },
+
+  async updateMenuItemPrice(id, price, adminUser = 'Dasaris_Darbar', name = undefined) {
+    try {
+      const res = await adminFetch(`/api/admin/menu/${encodeURIComponent(id)}/price`, {
+        method: 'PUT',
+        body: JSON.stringify({ price, adminUser, name })
+      });
+      return await res.json();
+    } catch (e) {
+      try {
+        const res2 = await adminFetch('/api/admin/menu/price', {
+          method: 'POST',
+          body: JSON.stringify({ id, price, adminUser, name })
+        });
+        return await res2.json();
+      } catch (err2) {
+        return { success: false, message: 'Could not reach server to update menu price: ' + e.message };
+      }
+    }
+  },
+
+  // --- TABLE RESERVATIONS (BOOKINGS) ---
+
+  async getBookings() {
+    try {
+      const res = await adminFetch('/api/admin/bookings');
+      return res.ok ? await res.json() : { success: false, data: [] };
+    } catch (e) {
+      return { success: false, data: [] };
+    }
+  },
+
+  async updateBookingStatus(id, status, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/bookings/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, adminUser })
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not update booking status: ' + e.message };
+    }
+  },
+
+  async createBooking(bookingData) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingData)
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not submit booking to server: ' + e.message };
+    }
+  },
+
+  async deleteBooking(id, adminUser = 'Dasaris_Darbar') {
+    try {
+      const res = await adminFetch(`/api/admin/bookings/${encodeURIComponent(id)}?adminUser=${encodeURIComponent(adminUser)}`, {
+        method: 'DELETE'
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not reach server to delete booking: ' + e.message };
+    }
   }
 };
 
 export default backendApi;
-

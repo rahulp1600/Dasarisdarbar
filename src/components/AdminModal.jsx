@@ -9,28 +9,38 @@ export default function AdminModal({ isOpen, onClose, onLoginSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setUsername('');
       setPassword('');
       setError('');
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsSubmitting(true);
 
-    const res = adminAuth.verifyLogin(username, password);
-    if (res.success) {
-      onLoginSuccess();
-      setUsername('');
-      setPassword('');
-      onClose();
-    } else {
-      setError(res.message || 'Invalid owner username or password.');
+    try {
+      const res = await adminAuth.verifyLogin(username, password);
+      setIsSubmitting(false);
+      if (res && res.success) {
+        onLoginSuccess();
+        setUsername('');
+        setPassword('');
+        onClose();
+      } else {
+        setError(res?.message || 'Invalid owner username or password.');
+      }
+    } catch (err) {
+      setIsSubmitting(false);
+      setError('Connection error. Please try again.');
     }
   };
 
@@ -116,8 +126,13 @@ export default function AdminModal({ isOpen, onClose, onLoginSuccess }) {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: '15px' }}>
-            LOG IN TO ADMIN PANEL
+          <button
+            type="submit"
+            className="btn-primary"
+            style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: '15px', opacity: isSubmitting ? 0.7 : 1 }}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'VERIFYING CREDENTIALS...' : 'LOG IN TO ADMIN PANEL'}
           </button>
         </form>
       </div>

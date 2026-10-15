@@ -81,6 +81,15 @@ export default function Booking() {
       offer_snapshot: offerSnapshot
     };
 
+    try {
+      const serverRes = await backendApi.createBooking(bookingData);
+      if (serverRes && serverRes.booking && serverRes.booking.id) {
+        bookingData.id = serverRes.booking.id;
+      }
+    } catch (e) {
+      console.warn('Backend createBooking fallback to local:', e.message);
+    }
+
     await dataStore.addBooking(bookingData);
     setIsSuccess(true);
 

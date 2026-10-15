@@ -4,6 +4,7 @@ import Footer from './components/Footer';
 import AdminModal from './components/AdminModal';
 import MobileBottomNav from './components/MobileBottomNav';
 import { dataStore } from './services/store';
+import adminAuth from './services/adminAuth';
 
 import Home from './pages/Home';
 import Menu from './pages/Menu';
@@ -67,6 +68,12 @@ export default function App() {
 
   useEffect(() => {
     dataStore.syncWithSupabase();
+    // Probe backend for existing valid HttpOnly admin session
+    adminAuth.checkSession().then(res => {
+      if (res && res.authenticated) {
+        setIsAdminLoggedIn(true);
+      }
+    }).catch(() => {});
 
     const timer = setTimeout(() => {
       setIsAppLoading(false);
@@ -161,7 +168,10 @@ export default function App() {
     navigateToPage('admin');
   };
 
-  const handleLogoutAdmin = () => {
+  const handleLogoutAdmin = async () => {
+    try {
+      await adminAuth.logout();
+    } catch (e) {}
     setIsAdminLoggedIn(false);
     navigateToPage('home');
   };

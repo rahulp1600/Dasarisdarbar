@@ -1,124 +1,105 @@
 // ============================================================================
 // DASARI'S DARBAR - ADMIN AUTHENTICATION SERVICE
-// Secure local authentication for restaurant owner & management
-// Default Initial Credentials (Specification Rule 33):
-// Username: Dasaris_Darbar
-// Password: admin@dasari1099
+// Secure backend-verified authentication for restaurant owner & management
+// ZERO PLAINTEXT CREDENTIALS STORED IN FRONTEND
 // ============================================================================
 
-const ADMIN_STORAGE_KEY = 'dd_admin_auth';
+import backendApi from './backendApi';
 
-const DEFAULT_ADMIN = {
-  username: 'Dasaris_Darbar',
-  password: 'admin@dasari1099',
-  role: 'owner',
-  updated_at: new Date().toISOString()
-};
-
-let inMemoryAdmin = null;
-
-function getStoredAdmin() {
+// Purge any legacy plaintext credentials left in browser localStorage
+if (typeof localStorage !== 'undefined') {
   try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(ADMIN_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.username && parsed.password) {
-          return parsed;
-        }
-      }
-    } else if (inMemoryAdmin) {
-      return inMemoryAdmin;
-    }
-  } catch (e) {
-    console.error('Error reading admin credentials from storage:', e);
-  }
-  return DEFAULT_ADMIN;
+    localStorage.removeItem('dd_admin_auth');
+  } catch (e) {}
 }
 
-function saveStoredAdmin(adminObj) {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(adminObj));
-    } else {
-      inMemoryAdmin = adminObj;
-    }
-  } catch (e) {
-    console.error('Error saving admin credentials to storage:', e);
-  }
-}
+let inMemoryUsername = 'Dasaris_Darbar';
 
 export const adminAuth = {
   /**
-   * Verify username & password against stored credentials
-   */
-  verifyLogin: (inputUsername, inputPassword) => {
+   * Verify username & password against backend server
+  login: async (inputUsername, inputPassword) => {
+    return adminAuth.verifyLogin(inputUsername, inputPassword);
+  },
+  verifyLogin: async (inputUsername, inputPassword) => {
     if (!inputUsername || !inputPassword) {
       return { success: false, message: 'Please enter both username and password.' };
     }
-    const current = getStoredAdmin();
-    const userMatch = inputUsername.trim().toLowerCase() === current.username.trim().toLowerCase();
-    const passMatch = inputPassword.trim() === current.password.trim();
 
-    if (userMatch && passMatch) {
-      return { success: true, message: 'Login successful', username: current.username };
+    try {
+      const res = await backendApi.adminLogin(inputUsername.trim(), inputPassword.trim());
+      if (res && res.success) {
+        if (res.username) inMemoryUsername = res.username;
+        return { success: true, message: res.message || 'Login successful', username: inMemoryUsername };
+      }
+      return { success: false, message: res?.message || 'Invalid admin username or password.' };
+    } catch (err) {
+      return { success: false, message: 'Could not reach server to verify credentials.' };
     }
-    return { success: false, message: 'Invalid admin username or password.' };
   },
 
   /**
-   * Get current admin username (never exposes password)
+   * Probe backend to see if a valid HttpOnly session cookie exists
+   */
+  checkSession: async () => {
+    try {
+      const res = await backendApi.checkAdminSession();
+      if (res && res.authenticated) {
+        if (res.username) inMemoryUsername = res.username;
+        return { authenticated: true, username: inMemoryUsername };
+      }
+      return { authenticated: false };
+    } catch (e) {
+      return { authenticated: false };
+    }
+  },
+
+  /**
+   * Log out admin from backend (revokes session and clears cookie)
+   */
+  logout: async () => {
+    try {
+      await backendApi.adminLogout();
+    } catch (e) {}
+    return { success: true };
+  },
+
+  /**
+   * Get current admin username (never exposes passwords)
    */
   getCurrentUsername: () => {
-    const current = getStoredAdmin();
-    return current.username || 'Dasaris_Darbar';
+    return inMemoryUsername;
   },
 
   /**
-   * Change admin credentials
-   * Requires: CURRENT PASSWORD, NEW USERNAME, NEW PASSWORD, CONFIRM PASSWORD
-   * Rule 33: If current password is incorrect: Do not allow change.
+   * Change admin credentials via secure backend endpoint
    */
-  changeCredentials: ({ currentPassword, newUsername, newPassword, confirmPassword }) => {
+  changeCredentials: async ({ currentPassword, newUsername, newPassword, confirmPassword }) => {
     if (!currentPassword) {
-      return { success: false, message: 'Current password is required to verify identity.' };
+      return { success: false, message: 'Current password is required.' };
     }
-
-    const current = getStoredAdmin();
-
-    if (currentPassword.trim() !== current.password.trim()) {
-      return { success: false, message: 'Verification failed: Current password is incorrect.' };
-    }
-
-    if (!newUsername || newUsername.trim().length < 3) {
-      return { success: false, message: 'New username must be at least 3 characters long.' };
-    }
-
     if (!newPassword || newPassword.length < 6) {
       return { success: false, message: 'New password must be at least 6 characters long.' };
     }
-
     if (newPassword !== confirmPassword) {
       return { success: false, message: 'New password and confirm password do not match.' };
     }
 
-    const updated = {
-      ...current,
-      username: newUsername.trim(),
-      password: newPassword.trim(),
-      updated_at: new Date().toISOString()
-    };
-
-    saveStoredAdmin(updated);
-    return { success: true, message: 'Admin username and password successfully updated!' };
-  },
-
-  /**
-   * Reset credentials to initial default (useful for troubleshooting)
-   */
-  resetToDefault: () => {
-    saveStoredAdmin(DEFAULT_ADMIN);
-    return { success: true, message: 'Admin credentials reset to defaults.' };
+    try {
+      const res = await backendApi.changeAdminCredentials({
+        currentPassword,
+        newUsername: (newUsername || inMemoryUsername).trim(),
+        newPassword,
+        confirmPassword
+      });
+      if (res && res.success) {
+        if (res.username) inMemoryUsername = res.username;
+        return { success: true, message: res.message || 'Credentials updated successfully!' };
+      }
+      return { success: false, message: res?.message || 'Could not update credentials.' };
+    } catch (e) {
+      return { success: false, message: 'Server error updating credentials.' };
+    }
   }
 };
 

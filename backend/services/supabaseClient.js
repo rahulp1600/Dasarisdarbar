@@ -14,6 +14,17 @@ dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
+const rawServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+export const isServiceRoleConfigured = Boolean(
+  rawServiceRoleKey &&
+  !rawServiceRoleKey.startsWith('sb_publishable_') &&
+  rawServiceRoleKey.length > 20
+);
+
+if (process.env.NODE_ENV === 'production' && !isServiceRoleConfigured) {
+  console.warn('[SECURITY NOTICE] SUPABASE_SERVICE_ROLE_KEY is missing or configured with an unprivileged publishable key. Privileged database operations will fail securely.');
+}
+
 export const supabase = (supabaseUrl && supabaseKey)
   ? createClient(supabaseUrl, supabaseKey, {
       auth: { persistSession: false, autoRefreshToken: false }
@@ -78,6 +89,18 @@ const DEFAULT_STORE = {
       expiry_days: 30
     }
   ],
+  reservation_offers: [
+    {
+      id: 'roffer_welcome',
+      title: 'Family Feast Dine-In Special',
+      description: 'Special 10% promotional dining benefit on your reserved table for parties of 4 or more.',
+      discount_percentage: 10,
+      start_date: '2026-10-01',
+      end_date: '2026-12-31',
+      active: true,
+      created_at: '2026-10-01T00:00:00.000Z'
+    }
+  ],
   customer_rewards: [],
   big_bill_coupons: [],
   redemptions: [],
@@ -92,7 +115,17 @@ export function readLocalStore() {
       return JSON.parse(JSON.stringify(DEFAULT_STORE));
     }
     const raw = fs.readFileSync(storePath, 'utf-8');
-    return JSON.parse(raw);
+    const store = JSON.parse(raw);
+    if (!store.reservation_offers) {
+      store.reservation_offers = JSON.parse(JSON.stringify(DEFAULT_STORE.reservation_offers));
+    }
+    if (!store.bookings) {
+      store.bookings = [];
+    }
+    if (!store.menu_items) {
+      store.menu_items = [];
+    }
+    return store;
   } catch (err) {
     console.error('Error reading local fallback store:', err);
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
