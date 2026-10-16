@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { supabase, readLocalStore, writeLocalStore } from '../services/supabaseClient.js';
 import { redeemVoucher, validateTrackAllocation, getActiveRewardOffers } from '../services/loyaltyEngine.js';
 import { 
@@ -391,10 +392,11 @@ router.post('/offers', async (req, res) => {
   }
 
   const store = readLocalStore();
-  const offerId = offer.id || `offer_${Date.now()}`;
+  const isUUID = offer.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(offer.id);
+  const offerId = isUUID ? offer.id : crypto.randomUUID();
   
   // Find existing offer to preserve non-overwritten fields
-  const existingOffer = (store.loyalty_offers || []).find(o => o.id === offerId);
+  const existingOffer = (store.loyalty_offers || []).find(o => o.id === offerId || (offer.id && o.id === offer.id));
 
   const offerPayload = {
     id: offerId,
@@ -414,7 +416,12 @@ router.post('/offers', async (req, res) => {
 
   if (supabase) {
     try {
-      await supabase.from('loyalty_offers').upsert(offerPayload);
+      const { data, error } = await supabase.from('loyalty_offers').upsert(offerPayload).select();
+      if (error) {
+        console.error('Supabase offer upsert error:', error.message);
+      } else if (data && data[0] && data[0].id) {
+        offerPayload.id = data[0].id;
+      }
     } catch (e) {
       console.warn('Supabase offer upsert fallback:', e.message);
     }
@@ -787,9 +794,6 @@ router.get('/audit-logs', async (req, res) => {
  * Retrieves all table reservation offers
  */
 router.get('/reservation-offers', async (req, res) => {
-  const store = readLocalStore();
-  const offers = store.reservation_offers || [];
-
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -797,7 +801,7 @@ router.get('/reservation-offers', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         const supabaseOffers = data.map(item => ({
           id: item.id,
           title: item.title,
@@ -808,16 +812,15 @@ router.get('/reservation-offers', async (req, res) => {
           active: item.active !== false,
           created_at: item.created_at
         }));
-
-        const ids = new Set(supabaseOffers.map(o => o.id));
-        const merged = [...supabaseOffers, ...offers.filter(o => !ids.has(o.id))];
-        return res.json({ success: true, data: merged });
+        return res.json({ success: true, data: supabaseOffers });
       }
     } catch (e) {
       console.warn('Supabase dine_in_offers query fallback:', e.message);
     }
   }
 
+  const store = readLocalStore();
+  const offers = store.reservation_offers || [];
   return res.json({ success: true, data: offers });
 });
 

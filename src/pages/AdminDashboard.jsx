@@ -54,13 +54,8 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         }
 
         if (resOffersRes.status === 'fulfilled' && resOffersRes.value && resOffersRes.value.success && Array.isArray(resOffersRes.value.data)) {
-          if (resOffersRes.value.data.length > 0) {
-            setReservationOffers(resOffersRes.value.data);
-            dataStore.saveReservationOffers(resOffersRes.value.data);
-          } else {
-            const fallback = dataStore.getReservationOffers();
-            setReservationOffers(fallback);
-          }
+          setReservationOffers(resOffersRes.value.data);
+          dataStore.saveReservationOffers(resOffersRes.value.data);
         }
       } catch (err) {
         console.warn('Admin dashboard data sync error:', err.message);
@@ -412,7 +407,16 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
       setReservationOffers(updated);
 
       try {
-        await backendApi.deleteReservationOffer(id, adminUser);
+        const res = await backendApi.deleteReservationOffer(id, adminUser);
+        if (res && res.success === false) {
+          alert(`Failed to delete reservation offer: ${res.message || 'Server error'}`);
+          return;
+        }
+        const fresh = await backendApi.getAdminReservationOffers();
+        if (fresh && fresh.success && Array.isArray(fresh.data)) {
+          setReservationOffers(fresh.data);
+          dataStore.saveReservationOffers(fresh.data);
+        }
       } catch (e) {
         console.warn('Backend delete reservation offer error:', e.message);
       }
@@ -575,6 +579,18 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         return;
       }
 
+      if (res?.offer) {
+        setOffers(prev => {
+          const idx = prev.findIndex(o => o.id === res.offer.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = res.offer;
+            return next;
+          }
+          return [...prev, res.offer];
+        });
+      }
+
       const freshOffers = await backendApi.getOffers();
       if (freshOffers && freshOffers.success && Array.isArray(freshOffers.data)) {
         setOffers(freshOffers.data);
@@ -589,6 +605,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         setOffers(loyaltyEngine.getOffers());
       }
       setIsOfferModalOpen(false);
+      setActiveTab('offers');
 
       if (res?.trackStatus && !res.trackStatus.isValid) {
         alert(`Notice: ${res.trackStatus.error}\nPlease adjust allocation percentages so active offers in this track total exactly 100%.`);

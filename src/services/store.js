@@ -364,7 +364,7 @@ export const localStoreManager = {
       }
     ];
     const stored = getStorage('dd_reservation_offers', null);
-    if (!stored || !Array.isArray(stored) || stored.length === 0) {
+    if (stored === null || !Array.isArray(stored)) {
       return initial;
     }
     return stored;
