@@ -39,7 +39,7 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const DEFAULT_STORE = {
+export const DEFAULT_STORE = {
   verified_bills: [],
   loyalty_claims: [],
   loyalty_progress: {},
@@ -47,46 +47,72 @@ const DEFAULT_STORE = {
     {
       id: 'offer_15_pct',
       title: '15% OFF',
+      track: 'track1',
       discount_type: 'percentage_discount',
       value: '15%',
       discount_percent: 15,
       max_discount: 400,
       description: '15% instant discount on your family dining bill (Max ₹400).',
       active: true,
-      expiry_days: 30
+      expiry_days: 30,
+      allocation_percentage: 25.0,
+      is_deleted: false
     },
     {
       id: 'offer_10_pct',
       title: '10% OFF',
+      track: 'track1',
       discount_type: 'percentage_discount',
       value: '10%',
       discount_percent: 10,
       max_discount: 300,
       description: '10% instant discount on your dining bill (Max ₹300).',
       active: true,
-      expiry_days: 30
+      expiry_days: 30,
+      allocation_percentage: 25.0,
+      is_deleted: false
     },
     {
       id: 'offer_free_dessert',
       title: 'FREE DESSERT',
+      track: 'track1',
       discount_type: 'free_item',
       value: 'Dessert',
       discount_percent: null,
       max_discount: null,
       description: 'Complimentary Double Ka Meetha or Apricot Delight with meal.',
       active: true,
-      expiry_days: 30
+      expiry_days: 30,
+      allocation_percentage: 25.0,
+      is_deleted: false
     },
     {
       id: 'offer_free_cooldrink',
       title: 'FREE COOL DRINK',
+      track: 'track1',
       discount_type: 'free_item',
       value: 'Cool Drink',
       discount_percent: null,
       max_discount: null,
       description: 'Complimentary chilled Goli Soda or beverage.',
       active: true,
-      expiry_days: 30
+      expiry_days: 30,
+      allocation_percentage: 25.0,
+      is_deleted: false
+    },
+    {
+      id: 'offer_bb_10',
+      title: '10% Big Bill Discount',
+      track: 'track2',
+      discount_type: 'percentage_discount',
+      value: '10%',
+      discount_percent: 10,
+      max_discount: 300,
+      description: '10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.',
+      active: true,
+      expiry_days: 30,
+      allocation_percentage: 100.0,
+      is_deleted: false
     }
   ],
   reservation_offers: [
@@ -116,6 +142,34 @@ export function readLocalStore() {
     }
     const raw = fs.readFileSync(storePath, 'utf-8');
     const store = JSON.parse(raw);
+    if (!store.loyalty_offers || !Array.isArray(store.loyalty_offers) || store.loyalty_offers.length === 0) {
+      store.loyalty_offers = JSON.parse(JSON.stringify(DEFAULT_STORE.loyalty_offers));
+    } else {
+      // Ensure all offers have track and is_deleted
+      store.loyalty_offers = store.loyalty_offers.map(o => ({
+        ...o,
+        track: o.track || 'track1',
+        is_deleted: Boolean(o.is_deleted || false)
+      }));
+      // If no Track 2 offer exists, seed the default Track 2 offer
+      const hasTrack2 = store.loyalty_offers.some(o => o.track === 'track2' && !o.is_deleted);
+      if (!hasTrack2) {
+        store.loyalty_offers.push({
+          id: 'offer_bb_10',
+          title: '10% Big Bill Discount',
+          track: 'track2',
+          discount_type: 'percentage_discount',
+          value: '10%',
+          discount_percent: 10,
+          max_discount: 300,
+          description: '10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.',
+          active: true,
+          expiry_days: 30,
+          allocation_percentage: 100.0,
+          is_deleted: false
+        });
+      }
+    }
     if (!store.reservation_offers) {
       store.reservation_offers = JSON.parse(JSON.stringify(DEFAULT_STORE.reservation_offers));
     }

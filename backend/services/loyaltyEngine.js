@@ -40,7 +40,7 @@ export async function getCycleApprovedVisitClaims(customerId) {
   let redemptions = [];
   let claims = [];
 
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const [redRes, clmRes] = await Promise.all([
         supabase.from('redemptions').select('*').eq('customer_id', customerId).eq('reward_type', 'milestone_reward').order('created_at', { ascending: false }).limit(1),
@@ -104,7 +104,7 @@ export async function getCustomerLoyaltyState(customerId) {
   let coupons = [];
   let recentBills = [];
 
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const [progRes, rewRes, coupRes, billsRes] = await Promise.all([
         supabase.from('loyalty_progress').select('*').eq('customer_id', customerId).single(),
@@ -164,7 +164,7 @@ export async function getCustomerLoyaltyState(customerId) {
  * Checks if customer already claimed a bill in category today
  */
 export async function checkDailyLimits(customerId, category, todayKolkata) {
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const { data, error } = await supabase
         .from('loyalty_claims')
@@ -177,52 +177,161 @@ export async function checkDailyLimits(customerId, category, todayKolkata) {
       if (!error && data && data.length > 0) {
         return { allowed: false, message: `Daily ${category === 'VISIT_REWARD' ? 'Visit' : 'Big Bill'} Reward limit reached. Only 1 claim allowed per day.` };
       }
-      return { allowed: true };
     } catch (e) {
       console.warn('Daily limit check Supabase fallback:', e.message);
     }
   }
 
-  // Fallback check
+  // Fallback check against local store
   const store = readLocalStore();
-  const claimsToday = store.loyalty_claims.filter(c => 
+  const claimsToday = (store.loyalty_claims || []).filter(c => 
     c.customer_id === customerId &&
     c.reward_category === category &&
     c.status === 'approved' &&
-    c.created_at && c.created_at.startsWith(todayKolkata)
+    c.created_at && (getKolkataDateString(c.created_at) === todayKolkata || c.created_at.startsWith(todayKolkata))
   );
 
   if (claimsToday.length > 0) {
     return { 
       allowed: false, 
-      message: `Daily ${category === 'VISIT_REWARD' ? 'Visit' : 'Big Bill'} Reward limit reached. Only 1 bill per day may be claimed for this category.` 
+      message: `Daily ${category === 'VISIT_REWARD' ? 'Visit' : 'Big Bill'} limit reached. Only 1 claim allowed per day.` 
     };
   }
 
   return { allowed: true };
 }
 
+// Queue-based Mutex map to prevent concurrent race conditions on daily limits / reward issuance
+const customerLocks = new Map();
+
+export async function withCustomerLock(customerId, fn) {
+  const prevLock = customerLocks.get(customerId) || Promise.resolve();
+  let releaseLock;
+  const currentLock = new Promise(resolve => { releaseLock = resolve; });
+  customerLocks.set(customerId, currentLock);
+
+  await prevLock;
+  try {
+    return await fn();
+  } finally {
+    releaseLock();
+    if (customerLocks.get(customerId) === currentLock) {
+      customerLocks.delete(customerId);
+    }
+  }
+}
+
 /**
- * Retrieves active reward offers from pool
+ * Retrieves active reward offers from pool, optionally filtered by track ('track1' | 'track2')
  */
-export async function getActiveRewardOffers() {
-  if (supabase) {
+export async function getActiveRewardOffers(track = null) {
+  let offers = [];
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('loyalty_offers')
         .select('*')
         .eq('active', true);
 
+      if (track) {
+        query = query.eq('track', track);
+      }
+
+      const { data, error } = await query;
       if (!error && data && data.length > 0) {
-        return data;
+        offers = data;
       }
     } catch (e) {
       // Fallback
     }
   }
 
-  const store = readLocalStore();
-  return store.loyalty_offers.filter(o => o.active);
+  if (offers.length === 0) {
+    const store = readLocalStore();
+    offers = (store.loyalty_offers || []).filter(o => o.active !== false && !o.is_deleted);
+    if (track) {
+      offers = offers.filter(o => (o.track || 'track1') === track);
+    }
+  }
+
+  // Ensure is_deleted filter
+  return offers.filter(o => !o.is_deleted);
+}
+
+/**
+ * Validates Track Allocation:
+ * - Each active percentage must be numeric between 0 and 100
+ * - Active offers in the track must total exactly 100%
+ */
+export async function validateTrackAllocation(track, providedOffers = null) {
+  const activeOffers = providedOffers || await getActiveRewardOffers(track);
+  const trackLabel = track === 'track1' ? 'Track 1 (Five-Visit Milestone)' : 'Track 2 (Big Bill)';
+
+  if (activeOffers.length === 0) {
+    return {
+      isValid: false,
+      totalPercentage: 0,
+      activeCount: 0,
+      error: `No active offers configured for ${trackLabel}.`
+    };
+  }
+
+  let total = 0;
+  for (const offer of activeOffers) {
+    const pct = Number(offer.allocation_percentage);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      return {
+        isValid: false,
+        totalPercentage: total,
+        activeCount: activeOffers.length,
+        error: `Offer "${offer.title || offer.name}" in ${trackLabel} has invalid percentage: ${offer.allocation_percentage}. Must be between 0 and 100.`
+      };
+    }
+    total += pct;
+  }
+
+  const roundedTotal = Math.round(total * 100) / 100;
+  const isValid = Math.abs(roundedTotal - 100) < 0.001;
+
+  return {
+    isValid,
+    totalPercentage: roundedTotal,
+    activeCount: activeOffers.length,
+    error: isValid ? null : `Total active allocation for ${trackLabel} is ${roundedTotal}%. Active offers must total exactly 100%.`
+  };
+}
+
+/**
+ * Performs weighted selection of an active offer for a given track based on saved admin percentages.
+ * - Rejects 0% offers from being selected.
+ * - Fails safely (returns null) if total percentage != 100% or no offers available.
+ * - Strictly never mixes Track 1 and Track 2.
+ */
+export async function selectWeightedOffer(track) {
+  const activeOffers = await getActiveRewardOffers(track);
+  const validation = await validateTrackAllocation(track, activeOffers);
+  if (!validation.isValid) {
+    console.warn(`[LOYALTY] Cannot select reward for ${track}: ${validation.error}`);
+    return null;
+  }
+
+  // Rule: 0% offers must never be selected
+  const eligibleOffers = activeOffers.filter(o => Number(o.allocation_percentage) > 0);
+  if (eligibleOffers.length === 0) {
+    console.warn(`[LOYALTY] No eligible offers with allocation > 0% in ${track}.`);
+    return null;
+  }
+
+  const rand = Math.random() * 100;
+  let cumulative = 0;
+  for (const offer of eligibleOffers) {
+    cumulative += Number(offer.allocation_percentage);
+    if (rand < cumulative) {
+      return { ...offer };
+    }
+  }
+
+  return { ...eligibleOffers[eligibleOffers.length - 1] };
 }
 
 /**
@@ -235,190 +344,246 @@ export async function processVerifiedBillClaim({
   fingerprint,
   imageReference = null
 }) {
-  const todayKolkata = getKolkataDateString();
-  const amount = Number(validatedBill.billAmount);
-  const isBigBill = amount >= 2000;
-  const rewardCategory = isBigBill ? 'BIG_BILL_REWARD' : 'VISIT_REWARD';
+  return await withCustomerLock(customerId, async () => {
+    const todayKolkata = getKolkataDateString();
+    const amount = Number(validatedBill.billAmount);
+    // Explicit Requirement: verified single bill of ₹1,999 or more qualifies for Big Bill track
+    const isBigBill = amount >= 1999;
+    const rewardCategory = isBigBill ? 'BIG_BILL_REWARD' : 'VISIT_REWARD';
 
-  // 1. Check daily limit
-  const limitCheck = await checkDailyLimits(customerId, rewardCategory, todayKolkata);
-  if (!limitCheck.allowed) {
-    // Record rejected claim
-    await recordClaimAttempt({
-      customerId,
-      billNumber: validatedBill.billNumber,
-      billDate: validatedBill.billDate,
-      billAmount: amount,
-      restaurantName: validatedBill.restaurant,
-      fingerprint,
-      status: 'rejected',
-      statusReason: limitCheck.message,
-      rewardCategory
-    });
+    // 1. Check daily limit
+    const limitCheck = await checkDailyLimits(customerId, rewardCategory, todayKolkata);
+    if (!limitCheck.allowed) {
+      // Record rejected claim
+      await recordClaimAttempt({
+        customerId,
+        billNumber: validatedBill.billNumber,
+        billDate: validatedBill.billDate,
+        billAmount: amount,
+        restaurantName: validatedBill.restaurant,
+        fingerprint,
+        status: 'rejected',
+        statusReason: limitCheck.message,
+        rewardCategory
+      });
 
-    return {
-      success: false,
-      message: limitCheck.message,
-      category: rewardCategory
-    };
-  }
-
-  // 2. Insert into verified_bills
-  let billRecord = {
-    id: crypto.randomUUID(),
-    customer_id: customerId,
-    bill_number: String(validatedBill.billNumber),
-    bill_date: validatedBill.billDate,
-    bill_amount: amount,
-    restaurant_name: validatedBill.restaurant,
-    ocr_raw_text: validatedBill.rawText || '',
-    ocr_confidence: validatedBill.confidence || 0.85,
-    bill_image_reference: imageReference,
-    bill_fingerprint: fingerprint,
-    verification_status: 'verified',
-    verification_reason: 'Automated OCR & sequence validation passed',
-    created_at: new Date().toISOString()
-  };
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('verified_bills')
-        .insert([billRecord])
-        .select();
-
-      if (!error && data && data[0]) {
-        billRecord = data[0];
-      }
-    } catch (e) {
-      console.warn('Supabase verified_bills insert fallback:', e.message);
+      return {
+        success: false,
+        message: limitCheck.message,
+        category: rewardCategory
+      };
     }
-  }
 
-  // Save to local fallback store as well
-  const store = readLocalStore();
-  store.verified_bills.push(billRecord);
+    // 2. Duplicate Bill / Fingerprint Protection
+    const store = readLocalStore();
+    const isDuplicate = (store.verified_bills || []).some(b => 
+      (fingerprint && b.bill_fingerprint === fingerprint) ||
+      (b.bill_number === String(validatedBill.billNumber) && b.bill_date === validatedBill.billDate)
+    );
 
-  // 3. Process according to Category
-  let rewardGenerated = null;
-  let couponGenerated = null;
-  let currentStreak = 0;
-  let newStreak = 0;
-  let cycleTotalAmount = 0;
+    if (isDuplicate) {
+      await recordClaimAttempt({
+        customerId,
+        billNumber: validatedBill.billNumber,
+        billDate: validatedBill.billDate,
+        billAmount: amount,
+        restaurantName: validatedBill.restaurant,
+        fingerprint,
+        status: 'rejected',
+        statusReason: 'Duplicate bill detected. Receipt has already been claimed.',
+        rewardCategory
+      });
 
-  if (isBigBill) {
-    // ₹2000+ Big Bill Coupon Rule:
-    // Does NOT increment normal 5-visit streak.
-    couponGenerated = {
+      return {
+        success: false,
+        message: 'This bill has already been used for a loyalty claim. Each physical receipt can only be claimed once.',
+        category: rewardCategory
+      };
+    }
+
+    // 3. Insert into verified_bills
+    let billRecord = {
       id: crypto.randomUUID(),
       customer_id: customerId,
-      source_bill_id: billRecord.id,
-      coupon_code: generateVoucherCode('DD-BIG'),
-      status: 'available',
-      discount_percent: 10.0,
-      max_discount: 300.0,
-      description: '10% instant discount on your next family dining visit (Max ₹300). Show original physical bill at counter when redeeming.',
-      counter_verification_notice: 'Please show your original ₹2,000+ bill at the counter to redeem this offer.',
-      issued_date: new Date().toISOString(),
-      expiry_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      bill_number: String(validatedBill.billNumber),
+      bill_date: validatedBill.billDate,
+      bill_amount: amount,
+      restaurant_name: validatedBill.restaurant,
+      ocr_raw_text: validatedBill.rawText || '',
+      ocr_confidence: validatedBill.confidence || 0.85,
+      bill_image_reference: imageReference,
+      bill_fingerprint: fingerprint,
+      verification_status: 'verified',
+      verification_reason: 'Automated OCR & sequence validation passed',
       created_at: new Date().toISOString()
     };
 
-    if (supabase) {
+    if (supabase && process.env.NODE_ENV !== 'test') {
       try {
-        const { data, error } = await supabase.from('big_bill_coupons').insert([couponGenerated]).select();
-        if (!error && data && data[0]) couponGenerated = data[0];
+        const { data, error } = await supabase
+          .from('verified_bills')
+          .insert([billRecord])
+          .select();
+
+        if (!error && data && data[0]) {
+          billRecord = data[0];
+        }
       } catch (e) {
-        console.warn('Supabase big_bill_coupons insert fallback:', e.message);
+        console.warn('Supabase verified_bills insert fallback:', e.message);
       }
     }
-    store.big_bill_coupons.push(couponGenerated);
 
-    // Fetch existing streak without incrementing
-    const userState = await getCustomerLoyaltyState(customerId);
-    currentStreak = userState.progress.qualifying_visits_count || 0;
-    newStreak = currentStreak;
+    // Save to local fallback store as well
+    store.verified_bills.push(billRecord);
 
-  } else {
-    // Qualifying Visit Rule (< ₹2000):
-    // Increment qualifying visits count
-    const userState = await getCustomerLoyaltyState(customerId);
-    currentStreak = userState.progress.qualifying_visits_count || 0;
-    const totalLifetime = (userState.progress.total_visits_lifetime || 0) + 1;
-    newStreak = Math.min(5, currentStreak + 1);
+    // 3. Process according to Category
+    let rewardGenerated = null;
+    let couponGenerated = null;
+    let currentStreak = 0;
+    let newStreak = 0;
+    let cycleTotalAmount = 0;
 
-    // Cumulative Total Calculation for Current Cycle (Asia/Kolkata cycle since last redeemed reward)
-    const priorCycleClaims = await getCycleApprovedVisitClaims(customerId);
-    const priorCycleTotal = priorCycleClaims.reduce((sum, c) => sum + Number(c.bill_amount || c.originalAmount || 0), 0);
-    cycleTotalAmount = priorCycleTotal + Number(amount);
+    if (isBigBill) {
+      // Track 2: Big Bill Reward (≥ ₹1,999)
+      // Does NOT increment normal 5-visit streak.
+      // Admin-controlled weighted allocation:
+      const selectedOffer = await selectWeightedOffer('track2');
+      if (!selectedOffer) {
+        return {
+          success: false,
+          message: 'Big Bill reward allocation configuration is currently invalid or incomplete (must total 100%). Please notify restaurant management.',
+          category: rewardCategory
+        };
+      }
 
-    // ELIGIBILITY RULE: Must have at least 5 valid, verified bills whose combined total is at least ₹2,000
-    const isEligible = newStreak >= 5 && cycleTotalAmount >= 2000;
+      const rewardType = selectedOffer.discount_type || selectedOffer.type || 'percentage_discount';
+      const rewardName = selectedOffer.title || selectedOffer.name || 'Big Bill Reward';
+      const discountPercent = selectedOffer.discount_percent !== null && selectedOffer.discount_percent !== undefined
+        ? Number(selectedOffer.discount_percent)
+        : null;
+      const maxDiscount = selectedOffer.max_discount !== null && selectedOffer.max_discount !== undefined
+        ? Number(selectedOffer.max_discount)
+        : null;
+      const expiryDays = Number(selectedOffer.expiry_days) || 30;
 
-    let progressUpdate = {
-      customer_id: customerId,
-      qualifying_visits_count: newStreak,
-      total_visits_lifetime: totalLifetime,
-      last_visit_date: todayKolkata,
-      milestone_unlocked: isEligible,
-      updated_at: new Date().toISOString()
-    };
-
-    // If customer qualifies (>= 5 bills AND combined total >= ₹2,000) -> Generate random reward from active pool
-    if (isEligible) {
-      const activeOffers = await getActiveRewardOffers();
-      const selectedOffer = activeOffers.length > 0 
-        ? activeOffers[Math.floor(Math.random() * activeOffers.length)]
-        : {
-            title: '15% OFF',
-            discount_type: 'percentage_discount',
-            discount_percent: 15,
-            max_discount: 400,
-            description: '15% instant discount on dining bill (Max ₹400).'
-          };
-
-      rewardGenerated = {
+      couponGenerated = {
         id: crypto.randomUUID(),
         customer_id: customerId,
-        reward_type: selectedOffer.discount_type || 'percentage_discount',
-        reward_name: selectedOffer.title || selectedOffer.name || '15% OFF',
-        reward_code: generateVoucherCode('DD-RW'),
         source_bill_id: billRecord.id,
+        source_offer_id: selectedOffer.id,
+        coupon_code: generateVoucherCode('DD-BIG'),
         status: 'available',
-        discount_percent: selectedOffer.discount_percent || 15,
-        max_discount: selectedOffer.max_discount || 400,
-        description: selectedOffer.description || '5-Visit Milestone Special Reward',
+        reward_type: rewardType,
+        reward_name: rewardName,
+        discount_percent: discountPercent,
+        max_discount: maxDiscount,
+        description: selectedOffer.description || `${rewardName} on your next dining visit. Show original physical bill at counter when redeeming.`,
+        counter_verification_notice: 'Please show your original ₹1,999+ bill at the counter to redeem this offer.',
         issued_date: new Date().toISOString(),
-        expiry_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expiry_date: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
         created_at: new Date().toISOString()
       };
 
-      if (supabase) {
+      if (supabase && process.env.NODE_ENV !== 'test') {
         try {
-          const { data, error } = await supabase.from('customer_rewards').insert([rewardGenerated]).select();
-          if (!error && data && data[0]) rewardGenerated = data[0];
+          const { data, error } = await supabase.from('big_bill_coupons').insert([couponGenerated]).select();
+          if (!error && data && data[0]) couponGenerated = data[0];
         } catch (e) {
-          console.warn('Supabase customer_rewards insert fallback:', e.message);
+          console.warn('Supabase big_bill_coupons insert fallback:', e.message);
         }
       }
-      store.customer_rewards.push(rewardGenerated);
-    }
+      store.big_bill_coupons.push(couponGenerated);
 
-    // Persist loyalty progress in Supabase & local
-    if (supabase) {
-      try {
-        await supabase
-          .from('loyalty_progress')
-          .upsert(progressUpdate, { onConflict: 'customer_id' });
-      } catch (e) {
-        console.warn('Supabase loyalty_progress upsert fallback:', e.message);
+      // Fetch existing streak without incrementing
+      const userState = await getCustomerLoyaltyState(customerId);
+      currentStreak = userState.progress.qualifying_visits_count || 0;
+      newStreak = currentStreak;
+
+    } else {
+      // Track 1: Qualifying Visit Rule (< ₹1,999)
+      // Increment qualifying visits count
+      const userState = await getCustomerLoyaltyState(customerId);
+      currentStreak = userState.progress.qualifying_visits_count || 0;
+      const totalLifetime = (userState.progress.total_visits_lifetime || 0) + 1;
+      newStreak = Math.min(5, currentStreak + 1);
+
+      // Cumulative Total Calculation for Current Cycle (Asia/Kolkata cycle since last redeemed reward)
+      const priorCycleClaims = await getCycleApprovedVisitClaims(customerId);
+      const priorCycleTotal = priorCycleClaims.reduce((sum, c) => sum + Number(c.bill_amount || c.originalAmount || 0), 0);
+      cycleTotalAmount = priorCycleTotal + Number(amount);
+
+      // ELIGIBILITY RULE: Must have at least 5 valid, verified bills whose combined total is at least ₹2,000
+      const isEligible = newStreak >= 5 && cycleTotalAmount >= 2000;
+
+      let progressUpdate = {
+        customer_id: customerId,
+        qualifying_visits_count: newStreak,
+        total_visits_lifetime: totalLifetime,
+        last_visit_date: todayKolkata,
+        milestone_unlocked: isEligible,
+        updated_at: new Date().toISOString()
+      };
+
+      // If customer qualifies (>= 5 bills AND combined total >= ₹2,000) -> Generate reward using Track 1 weighted selection
+      if (isEligible) {
+        const selectedOffer = await selectWeightedOffer('track1');
+        if (selectedOffer) {
+          const rewardType = selectedOffer.discount_type || selectedOffer.type || 'percentage_discount';
+          const rewardName = selectedOffer.title || selectedOffer.name || '15% OFF';
+          const discountPercent = selectedOffer.discount_percent !== null && selectedOffer.discount_percent !== undefined
+            ? Number(selectedOffer.discount_percent)
+            : null;
+          const maxDiscount = selectedOffer.max_discount !== null && selectedOffer.max_discount !== undefined
+            ? Number(selectedOffer.max_discount)
+            : null;
+          const expiryDays = Number(selectedOffer.expiry_days) || 30;
+
+          rewardGenerated = {
+            id: crypto.randomUUID(),
+            customer_id: customerId,
+            original_offer_id: selectedOffer.id,
+            reward_type: rewardType,
+            reward_name: rewardName,
+            reward_code: generateVoucherCode('DD-RW'),
+            source_bill_id: billRecord.id,
+            status: 'available',
+            discount_percent: discountPercent,
+            max_discount: maxDiscount,
+            description: selectedOffer.description || `${rewardName} 5-Visit Milestone Special Reward`,
+            issued_date: new Date().toISOString(),
+            expiry_date: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+            created_at: new Date().toISOString()
+          };
+
+          if (supabase && process.env.NODE_ENV !== 'test') {
+            try {
+              const { data, error } = await supabase.from('customer_rewards').insert([rewardGenerated]).select();
+              if (!error && data && data[0]) rewardGenerated = data[0];
+            } catch (e) {
+              console.warn('Supabase customer_rewards insert fallback:', e.message);
+            }
+          }
+          store.customer_rewards.push(rewardGenerated);
+        } else {
+          console.warn('[LOYALTY] Track 1 configuration invalid; fail-safe: milestone reached without reward issuance until reconfigured.');
+        }
       }
+
+      // Persist loyalty progress in Supabase & local
+      if (supabase && process.env.NODE_ENV !== 'test') {
+        try {
+          await supabase
+            .from('loyalty_progress')
+            .upsert(progressUpdate, { onConflict: 'customer_id' });
+        } catch (e) {
+          console.warn('Supabase loyalty_progress upsert fallback:', e.message);
+        }
+      }
+      store.loyalty_progress[customerId] = {
+        ...progressUpdate,
+        cycle_total_amount: cycleTotalAmount
+      };
     }
-    store.loyalty_progress[customerId] = {
-      ...progressUpdate,
-      cycle_total_amount: cycleTotalAmount
-    };
-  }
 
   // 4. Record successful claim
   const claimRecord = await recordClaimAttempt({
@@ -431,8 +596,12 @@ export async function processVerifiedBillClaim({
     status: 'approved',
     statusReason: 'Bill verified successfully',
     rewardCategory,
-    rewardId: rewardGenerated ? rewardGenerated.id : (couponGenerated ? couponGenerated.id : null)
   });
+
+  // Ensure claimRecord is present in current in-memory store before persisting
+  if (!store.loyalty_claims.some(c => c.id === claimRecord.id)) {
+    store.loyalty_claims.push(claimRecord);
+  }
 
   // Save local store
   writeLocalStore(store);
@@ -473,6 +642,7 @@ export async function processVerifiedBillClaim({
     rewardGenerated,
     couponGenerated
   };
+  });
 }
 
 /**
@@ -506,7 +676,7 @@ async function recordClaimAttempt({
   };
 
   let savedClaim = claim;
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const { data, error } = await supabase.from('loyalty_claims').insert([claim]).select();
       if (!error && data && data[0]) savedClaim = data[0];
@@ -542,7 +712,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
   let voucherType = null; // 'milestone_reward' or 'big_bill_coupon'
 
   // 1. Search customer_rewards
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const { data: rewData } = await supabase
         .from('customer_rewards')
@@ -569,7 +739,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
 
   // 2. Search big_bill_coupons if not found in customer_rewards
   if (!voucher) {
-    if (supabase) {
+    if (supabase && process.env.NODE_ENV !== 'test') {
       try {
         const { data: coupData } = await supabase
           .from('big_bill_coupons')
@@ -620,7 +790,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
   voucher.status = 'redeemed';
   voucher.redeemed_date = nowIso;
 
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const targetTable = voucherType === 'milestone_reward' ? 'customer_rewards' : 'big_bill_coupons';
       await supabase
@@ -644,7 +814,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
     staff_verified: true
   };
 
-  if (supabase) {
+  if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       await supabase.from('redemptions').insert([redemptionRecord]);
     } catch (e) {
@@ -656,7 +826,7 @@ export async function redeemVoucher({ voucherCode, staffIdentifier = 'Staff Coun
   // 5. Critical Rule: If this was a milestone reward, reset customer streak 5/5 -> 0/5
   let streakReset = false;
   if (voucherType === 'milestone_reward') {
-    if (supabase) {
+    if (supabase && process.env.NODE_ENV !== 'test') {
       try {
         await supabase
           .from('loyalty_progress')

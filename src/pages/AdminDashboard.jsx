@@ -74,14 +74,16 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
   const [bookings, setBookings] = useState(dataStore.getBookings());
   const [offers, setOffers] = useState(loyaltyEngine.getOffers());
 
-  // Offers Management Modal State (Rule 7 & 31)
+  // Offers Management Modal State (Track 1 & Track 2 Admin Control)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [offerFormData, setOfferFormData] = useState({ 
     id: null, 
+    track: 'track1',
     name: '', 
     type: 'percentage_discount', 
     discount_percent: 10, 
     max_discount: 300, 
+    allocation_percentage: 25,
     description: '', 
     expiry_days: 30, 
     is_active: true 
@@ -478,7 +480,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
     }
   };
 
-  // --- HANDLERS FOR LOYALTY OFFERS (Rule 7 & 31) ---
+  // --- HANDLERS FOR LOYALTY OFFERS (Track 1 & Track 2 Admin Control) ---
   const handleToggleOffer = async (id) => {
     const target = offers.find(o => o.id === id);
     const newActive = target ? !(target.is_active !== undefined ? target.is_active : target.active) : false;
@@ -488,20 +490,31 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         alert(`Failed to toggle offer status: ${res.message || 'Server error'}`);
         return;
       }
-      const updated = loyaltyEngine.toggleOfferActive(id);
-      setOffers(updated);
+      const freshOffers = await backendApi.getOffers();
+      if (freshOffers && freshOffers.success && Array.isArray(freshOffers.data)) {
+        setOffers(freshOffers.data);
+      } else {
+        const updated = loyaltyEngine.toggleOfferActive(id);
+        setOffers(updated);
+      }
+
+      if (res?.trackStatus && !res.trackStatus.isValid) {
+        alert(`Notice: ${res.trackStatus.error}\nPlease ensure active offers in this track total exactly 100%.`);
+      }
     } catch (e) {
       alert(`Error toggling offer status: ${e.message}`);
     }
   };
 
-  const handleOpenAddOffer = () => {
+  const handleOpenAddOffer = (targetTrack = 'track1') => {
     setOfferFormData({
       id: null,
+      track: targetTrack === 'track2' ? 'track2' : 'track1',
       name: '',
       type: 'percentage_discount',
       discount_percent: 10,
       max_discount: 300,
+      allocation_percentage: 0,
       description: '',
       expiry_days: 30,
       is_active: true
@@ -512,10 +525,12 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
   const handleOpenEditOffer = (offer) => {
     setOfferFormData({
       id: offer.id,
+      track: offer.track || 'track1',
       name: offer.name || offer.title || '',
       type: offer.type || (offer.discount_type === 'percent' ? 'percentage_discount' : 'free_item'),
       discount_percent: offer.discount_percent || 10,
       max_discount: offer.max_discount || 300,
+      allocation_percentage: offer.allocation_percentage !== undefined ? Number(offer.allocation_percentage) : 0,
       description: offer.description || '',
       expiry_days: offer.expiry_days || 30,
       is_active: offer.is_active !== undefined ? offer.is_active : (offer.active !== undefined ? offer.active : true)
@@ -530,14 +545,22 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
       return;
     }
 
+    const allocPct = Number(offerFormData.allocation_percentage);
+    if (isNaN(allocPct) || allocPct < 0 || allocPct > 100) {
+      alert('Allocation percentage must be a valid number between 0 and 100.');
+      return;
+    }
+
     const payload = {
       id: offerFormData.id,
+      track: offerFormData.track || 'track1',
       title: offerFormData.name.trim(),
       name: offerFormData.name.trim(),
       type: offerFormData.type,
       discount_type: offerFormData.type === 'percentage_discount' ? 'percent' : 'free_item',
       discount_percent: offerFormData.type === 'percentage_discount' ? Number(offerFormData.discount_percent) : null,
       max_discount: offerFormData.type === 'percentage_discount' ? Number(offerFormData.max_discount) : null,
+      allocation_percentage: allocPct,
       description: offerFormData.description.trim(),
       expiry_days: Number(offerFormData.expiry_days) || 30,
       is_active: offerFormData.is_active,
@@ -552,7 +575,10 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         return;
       }
 
-      if (offerFormData.id) {
+      const freshOffers = await backendApi.getOffers();
+      if (freshOffers && freshOffers.success && Array.isArray(freshOffers.data)) {
+        setOffers(freshOffers.data);
+      } else if (offerFormData.id) {
         const updated = loyaltyEngine.updateOffer(offerFormData.id, payload);
         setOffers(updated);
       } else {
@@ -563,21 +589,34 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         setOffers(loyaltyEngine.getOffers());
       }
       setIsOfferModalOpen(false);
+
+      if (res?.trackStatus && !res.trackStatus.isValid) {
+        alert(`Notice: ${res.trackStatus.error}\nPlease adjust allocation percentages so active offers in this track total exactly 100%.`);
+      }
     } catch (err) {
       alert(`Error saving offer: ${err.message}`);
     }
   };
 
   const handleDeleteOffer = async (id) => {
-    if (window.confirm('Are you sure you want to delete this offer from the active pool?')) {
+    if (window.confirm('Are you sure you want to archive/delete this offer?\n\nNote: All previously issued customer rewards and vouchers are safely preserved.')) {
       try {
         const res = await backendApi.deleteOffer(id, adminUser);
         if (res && res.success === false) {
           alert(`Failed to delete offer: ${res.message || 'Server error'}`);
           return;
         }
-        const updated = loyaltyEngine.deleteOffer(id);
-        setOffers(updated);
+        const freshOffers = await backendApi.getOffers();
+        if (freshOffers && freshOffers.success && Array.isArray(freshOffers.data)) {
+          setOffers(freshOffers.data);
+        } else {
+          const updated = loyaltyEngine.deleteOffer(id);
+          setOffers(updated);
+        }
+
+        if (res?.trackStatus && !res.trackStatus.isValid) {
+          alert(`Notice: ${res.trackStatus.error}\nPlease reconfigure remaining active offer percentages so they total exactly 100%.`);
+        }
       } catch (e) {
         alert(`Error deleting offer: ${e.message}`);
       }
@@ -1868,233 +1907,459 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         {/* ========================================================================= */}
         {/* TAB 4: LOYALTY OFFERS (ADMIN-MANAGED REWARD POOL - Rules 4, 7, 31) */}
         {/* ========================================================================= */}
-        {activeTab === 'offers' && (
-          <div>
-            {/* Active Dine-In Offers Pool */}
-            <div style={{ background: 'var(--white)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-sm)', marginBottom: '32px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        {activeTab === 'offers' && (() => {
+          const track1Offers = offers.filter(o => (o.track || 'track1') === 'track1' && !o.is_deleted);
+          const track2Offers = offers.filter(o => o.track === 'track2' && !o.is_deleted);
+
+          const track1ActiveTotal = Math.round(
+            track1Offers
+              .filter(o => (o.is_active ?? o.active))
+              .reduce((sum, o) => sum + Number(o.allocation_percentage || 0), 0) * 100
+          ) / 100;
+
+          const track2ActiveTotal = Math.round(
+            track2Offers
+              .filter(o => (o.is_active ?? o.active))
+              .reduce((sum, o) => sum + Number(o.allocation_percentage || 0), 0) * 100
+          ) / 100;
+
+          const isTrack1Valid = Math.abs(track1ActiveTotal - 100) < 0.001;
+          const isTrack2Valid = Math.abs(track2ActiveTotal - 100) < 0.001;
+
+          return (
+            <div>
+              {/* Architecture & Safety Snapshot Notice */}
+              <div style={{ background: '#E8F5E9', border: '1px solid #C8E6C9', borderRadius: '10px', padding: '14px 18px', marginBottom: '24px', fontSize: '13px', color: '#2E7D32', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldAlert size={20} />
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(6, 69, 45, 0.1)', color: 'var(--deep-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Gift size={18} />
-                    </div>
-                    <h3 style={{ fontSize: '18px', color: 'var(--deep-green)', margin: 0 }}>
-                      Loyalty Offers Pool ({offers.length})
-                    </h3>
+                  <strong>Admin-Controlled Reward Allocations & Historical Safety Active:</strong>
+                  <div style={{ fontSize: '12px', marginTop: '2px', color: '#1B5E20' }}>
+                    Track 1 and Track 2 operate completely independently. Active offers in each track must total exactly 100%. Zero-percent offers are allowed but never issued. Editing or deleting offers creates safe snapshots and will NEVER alter or destroy previously issued vouchers or customer history.
                   </div>
-                  <p style={{ fontSize: '12px', color: 'var(--muted-grey)', margin: '4px 0 0 0' }}>
-                    Active reward pool randomly awarded to customers when they reach 5 verified visits.
-                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleOpenAddOffer}
-                  className="btn-primary"
-                  style={{ padding: '8px 18px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Plus size={16} /> ADD NEW OFFER
-                </button>
               </div>
 
-              {/* Safety Snapshot Notice per Rule 6 & 32 */}
-              <div style={{ background: '#E8F5E9', border: '1px solid #C8E6C9', borderRadius: '8px', padding: '10px 14px', marginBottom: '18px', fontSize: '12.5px', color: '#2E7D32' }}>
-                🛡️ <strong>Reward History Protection Active:</strong> When customers reach 5/5, an immutable snapshot of the assigned reward is permanently stored. Editing or deactivating offers below will never alter previously issued customer rewards.
-              </div>
-              
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Offer Name</th>
-                    <th>Reward Type & Details</th>
-                    <th>Status</th>
-                    <th>Reward Usage</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offers.map(o => {
-                    const usageCount = rewards.filter(r => r.originalOfferId === o.id).length;
-                    const isPercentage = o.type === 'percentage_discount';
-                    return (
-                      <tr key={o.id}>
-                        <td style={{ fontWeight: '800', color: 'var(--deep-green)', fontSize: '14px' }}>
-                          {o.name || o.title}
-                        </td>
-                        <td>
-                          {isPercentage ? (
-                            <span style={{ fontSize: '13px', color: '#444' }}>
-                              <strong>{o.discount_percent || 10}% OFF</strong> (Max ₹{o.max_discount || 300})
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '13px', color: '#444' }}>
-                              Free Item: <strong>{o.description || 'Complimentary Item'}</strong>
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            style={{
-                              background: (o.is_active ?? o.active) ? '#E8F5E9' : '#FFEBEE',
-                              color: (o.is_active ?? o.active) ? '#2E7D32' : '#C62828',
-                              border: 'none', 
-                              padding: '5px 12px', 
-                              borderRadius: '20px', 
-                              fontSize: '11px', 
-                              fontWeight: '800', 
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => handleToggleOffer(o.id)}
-                            title="Click to toggle active / deactivated status"
-                          >
-                            {(o.is_active ?? o.active) ? 'ACTIVE' : 'DEACTIVATED'}
-                          </button>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: '700', color: '#555', fontSize: '13px' }}>
-                            {usageCount} issued
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditOffer(o)}
-                              title="Edit Offer"
-                              style={{
-                                background: '#F0F4F8',
-                                border: '1px solid #D0D7DE',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                color: 'var(--deep-green)',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontSize: '12px',
-                                fontWeight: '600'
-                              }}
-                            >
-                              <Edit2 size={13} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleOffer(o.id)}
-                              style={{
-                                background: (o.is_active ?? o.active) ? '#FFF3E0' : '#E8F5E9',
-                                border: (o.is_active ?? o.active) ? '1px solid #FFE0B2' : '1px solid #C8E6C9',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                color: (o.is_active ?? o.active) ? '#E65100' : '#2E7D32',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: '600'
-                              }}
-                            >
-                              {(o.is_active ?? o.active) ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteOffer(o.id)}
-                              title="Delete Offer"
-                              style={{
-                                background: '#FFEBEE',
-                                border: '1px solid #FFCDD2',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                color: '#C62828',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontSize: '12px',
-                                fontWeight: '600'
-                              }}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
+              {/* ========================================================================= */}
+              {/* TRACK 1: FIVE-VISIT MILESTONE REWARDS */}
+              {/* ========================================================================= */}
+              <div style={{ background: 'var(--white)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-sm)', marginBottom: '32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(6, 69, 45, 0.1)', color: 'var(--deep-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Gift size={20} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '18px', color: 'var(--deep-green)', margin: 0, fontWeight: '800' }}>
+                          Track 1 — Five-Visit Milestone Rewards
+                        </h3>
+                        <p style={{ fontSize: '12px', color: 'var(--muted-grey)', margin: '2px 0 0 0' }}>
+                          Eligible bills &lt; ₹1,999 (1 visit/day). Milestone unlocked on 5th visit with cumulative cycle spend ≥ ₹2,000.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    {/* Track 1 Validation Pill */}
+                    <div style={{
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontSize: '12.5px',
+                      fontWeight: '800',
+                      background: isTrack1Valid ? '#E8F5E9' : '#FFEBEE',
+                      color: isTrack1Valid ? '#2E7D32' : '#C62828',
+                      border: `1px solid ${isTrack1Valid ? '#A5D6A7' : '#FFCDD2'}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      {isTrack1Valid ? <Check size={14} /> : <X size={14} />}
+                      Active Allocation: {track1ActiveTotal}% {isTrack1Valid ? '(Valid 100%)' : '(INVALID - Must be 100%)'}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddOffer('track1')}
+                      className="btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Plus size={16} /> ADD TRACK 1 OFFER
+                    </button>
+                  </div>
+                </div>
+
+                {!isTrack1Valid && (
+                  <div style={{ background: '#FFF3E0', border: '1px solid #FFE0B2', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '12.5px', color: '#E65100' }}>
+                    ⚠️ <strong>Track 1 Allocation Alert:</strong> Currently active offers total <strong>{track1ActiveTotal}%</strong> instead of exactly 100%. To prevent unintended awards, the loyalty engine will fail-safe and pause milestone reward issuance until percentages total 100%.
+                  </div>
+                )}
+
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Offer Name</th>
+                      <th>Reward Type & Details</th>
+                      <th>Allocation Weight</th>
+                      <th>Status</th>
+                      <th>Reward Usage</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {track1Offers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--muted-grey)' }}>
+                          No Track 1 offers configured. Click "Add Track 1 Offer" to create your first milestone offer.
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      track1Offers.map(o => {
+                        const usageCount = (rewards || []).filter(r => r.originalOfferId === o.id || r.offerId === o.id).length;
+                        const isPercentage = o.type === 'percentage_discount' || o.discount_type === 'percent' || o.discount_type === 'percentage_discount';
+                        const pct = Number(o.allocation_percentage || 0);
+                        const isActive = (o.is_active ?? o.active);
 
-            {/* Big Bill Rewards Configuration */}
-            <div style={{ background: 'var(--white)', padding: '24px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', marginBottom: '32px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(165, 38, 42, 0.1)', color: 'var(--brand-red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ticket size={20} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '18px', color: 'var(--deep-green)', margin: 0 }}>
-                    Big Bill Rewards Configuration (≥ ₹2,000)
-                  </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--muted-grey)', margin: '2px 0 0 0' }}>
-                    Configure the instant discount coupon generated when bills reach ₹2,000 or more.
-                  </p>
-                </div>
+                        return (
+                          <tr key={o.id}>
+                            <td style={{ fontWeight: '800', color: 'var(--deep-green)', fontSize: '14px' }}>
+                              {o.title || o.name}
+                            </td>
+                            <td>
+                              {isPercentage ? (
+                                <span style={{ fontSize: '13px', color: '#333' }}>
+                                  <strong>{o.discount_percent || 10}% OFF</strong> (Max ₹{o.max_discount || 300})
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '13px', color: '#333' }}>
+                                  Free Item: <strong>{o.description || 'Complimentary Item'}</strong>
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{
+                                  fontSize: '13px',
+                                  fontWeight: '800',
+                                  color: pct === 0 ? '#888' : 'var(--deep-green)',
+                                  background: pct === 0 ? '#F0F0F0' : 'rgba(6, 69, 45, 0.08)',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  {pct}%
+                                </span>
+                                {pct === 0 && (
+                                  <span style={{ fontSize: '11px', color: '#999', fontStyle: 'italic' }}>
+                                    (Never selected)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <button
+                                style={{
+                                  background: isActive ? '#E8F5E9' : '#FFEBEE',
+                                  color: isActive ? '#2E7D32' : '#C62828',
+                                  border: 'none', 
+                                  padding: '5px 12px', 
+                                  borderRadius: '20px', 
+                                  fontSize: '11px', 
+                                  fontWeight: '800', 
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => handleToggleOffer(o.id)}
+                                title="Click to toggle active / deactivated status"
+                              >
+                                {isActive ? 'ACTIVE' : 'DEACTIVATED'}
+                              </button>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: '700', color: '#555', fontSize: '13px' }}>
+                                {usageCount} issued
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditOffer(o)}
+                                  title="Edit Offer"
+                                  style={{
+                                    background: '#F0F4F8',
+                                    border: '1px solid #D0D7DE',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: 'var(--deep-green)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  <Edit2 size={13} /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleOffer(o.id)}
+                                  style={{
+                                    background: isActive ? '#FFF3E0' : '#E8F5E9',
+                                    border: isActive ? '1px solid #FFE0B2' : '1px solid #C8E6C9',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: isActive ? '#E65100' : '#2E7D32',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  {isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOffer(o.id)}
+                                  title="Archive / Delete Offer"
+                                  style={{
+                                    background: '#FFEBEE',
+                                    border: '1px solid #FFCDD2',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: '#C62828',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
 
-              <form onSubmit={handleSaveConfig} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px' }}>
-                <div>
-                  <label className="form-label">Big Bill Threshold (₹)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={loyaltyConfig.track2Threshold}
-                    onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, track2Threshold: Number(e.target.value) })}
-                    required
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted-grey)' }}>Bills equal or above are Big Bill Rewards (default ₹2,000)</span>
+              {/* ========================================================================= */}
+              {/* TRACK 2: BIG BILL REWARDS (≥ ₹1,999) */}
+              {/* ========================================================================= */}
+              <div style={{ background: 'var(--white)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-sm)', marginBottom: '32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(165, 38, 42, 0.1)', color: 'var(--brand-red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ticket size={20} />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <h3 style={{ fontSize: '18px', color: 'var(--deep-green)', margin: 0, fontWeight: '800' }}>
+                            Track 2 — Big Bill Rewards
+                          </h3>
+                          <span style={{ background: 'rgba(165, 38, 42, 0.08)', color: 'var(--brand-red)', border: '1px solid rgba(165, 38, 42, 0.2)', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800' }}>
+                            Threshold: Verified Single Bill ≥ ₹1,999
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '12px', color: 'var(--muted-grey)', margin: '2px 0 0 0' }}>
+                          Awarded independently. Maximum 1 Big Bill reward per customer per calendar day. Requires physical bill at counter.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    {/* Track 2 Validation Pill */}
+                    <div style={{
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontSize: '12.5px',
+                      fontWeight: '800',
+                      background: isTrack2Valid ? '#E8F5E9' : '#FFEBEE',
+                      color: isTrack2Valid ? '#2E7D32' : '#C62828',
+                      border: `1px solid ${isTrack2Valid ? '#A5D6A7' : '#FFCDD2'}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      {isTrack2Valid ? <Check size={14} /> : <X size={14} />}
+                      Active Allocation: {track2ActiveTotal}% {isTrack2Valid ? '(Valid 100%)' : '(INVALID - Must be 100%)'}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddOffer('track2')}
+                      className="btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--brand-red)' }}
+                    >
+                      <Plus size={16} /> ADD TRACK 2 OFFER
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Discount Percentage (%)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={loyaltyConfig.track2DiscountPercent}
-                    onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, track2DiscountPercent: Number(e.target.value) })}
-                    required
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted-grey)' }}>Instant discount percentage (default: 10%)</span>
-                </div>
+                {!isTrack2Valid && (
+                  <div style={{ background: '#FFF3E0', border: '1px solid #FFE0B2', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '12.5px', color: '#E65100' }}>
+                    ⚠️ <strong>Track 2 Allocation Alert:</strong> Currently active offers total <strong>{track2ActiveTotal}%</strong> instead of exactly 100%. The loyalty engine will fail-safe and pause Big Bill reward issuance until percentages total 100%.
+                  </div>
+                )}
 
-                <div>
-                  <label className="form-label">Maximum Discount Cap (₹)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={loyaltyConfig.track2MaxDiscount}
-                    onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, track2MaxDiscount: Number(e.target.value) })}
-                    required
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted-grey)' }}>Max discount limit (default: ₹300)</span>
-                </div>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Offer Name</th>
+                      <th>Reward Type & Details</th>
+                      <th>Allocation Weight</th>
+                      <th>Status</th>
+                      <th>Coupons Issued</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {track2Offers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--muted-grey)' }}>
+                          No Track 2 Big Bill offers configured. Click "Add Track 2 Offer" to create 10% OFF, 15% OFF, Biryani, Mandi, etc.
+                        </td>
+                      </tr>
+                    ) : (
+                      track2Offers.map(o => {
+                        const usageCount = (coupons || []).filter(c => c.source_offer_id === o.id || c.offerId === o.id).length;
+                        const isPercentage = o.type === 'percentage_discount' || o.discount_type === 'percent' || o.discount_type === 'percentage_discount';
+                        const pct = Number(o.allocation_percentage || 0);
+                        const isActive = (o.is_active ?? o.active);
 
-                <div>
-                  <label className="form-label">Timezone Enforced</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={loyaltyConfig.timezone}
-                    disabled
-                    style={{ background: '#EEE' }}
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted-grey)' }}>Asia/Kolkata Calendar Day</span>
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <button type="submit" className="btn-primary" style={{ padding: '10px 24px' }}>
-                    SAVE BIG BILL CONFIGURATION
-                  </button>
-                </div>
-              </form>
+                        return (
+                          <tr key={o.id}>
+                            <td style={{ fontWeight: '800', color: 'var(--brand-red)', fontSize: '14px' }}>
+                              {o.title || o.name}
+                            </td>
+                            <td>
+                              {isPercentage ? (
+                                <span style={{ fontSize: '13px', color: '#333' }}>
+                                  <strong>{o.discount_percent || 10}% OFF</strong> (Max ₹{o.max_discount || 500})
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '13px', color: '#333' }}>
+                                  Free Item: <strong>{o.description || 'Complimentary Item'}</strong>
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{
+                                  fontSize: '13px',
+                                  fontWeight: '800',
+                                  color: pct === 0 ? '#888' : 'var(--brand-red)',
+                                  background: pct === 0 ? '#F0F0F0' : 'rgba(165, 38, 42, 0.08)',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  {pct}%
+                                </span>
+                                {pct === 0 && (
+                                  <span style={{ fontSize: '11px', color: '#999', fontStyle: 'italic' }}>
+                                    (Never selected)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <button
+                                style={{
+                                  background: isActive ? '#E8F5E9' : '#FFEBEE',
+                                  color: isActive ? '#2E7D32' : '#C62828',
+                                  border: 'none', 
+                                  padding: '5px 12px', 
+                                  borderRadius: '20px', 
+                                  fontSize: '11px', 
+                                  fontWeight: '800', 
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => handleToggleOffer(o.id)}
+                                title="Click to toggle active / deactivated status"
+                              >
+                                {isActive ? 'ACTIVE' : 'DEACTIVATED'}
+                              </button>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: '700', color: '#555', fontSize: '13px' }}>
+                                {usageCount} issued
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditOffer(o)}
+                                  title="Edit Offer"
+                                  style={{
+                                    background: '#F0F4F8',
+                                    border: '1px solid #D0D7DE',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: 'var(--deep-green)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  <Edit2 size={13} /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleOffer(o.id)}
+                                  style={{
+                                    background: isActive ? '#FFF3E0' : '#E8F5E9',
+                                    border: isActive ? '1px solid #FFE0B2' : '1px solid #C8E6C9',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: isActive ? '#E65100' : '#2E7D32',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  {isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOffer(o.id)}
+                                  title="Archive / Delete Offer"
+                                  style={{
+                                    background: '#FFEBEE',
+                                    border: '1px solid #FFCDD2',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    color: '#C62828',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ========================================================================= */}
         {/* TAB: TABLE RESERVATION OFFERS */}
@@ -2813,32 +3078,51 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
       {/* ========================================================================= */}
       {isOfferModalOpen && (
         <div className="modal-overlay" onClick={() => setIsOfferModalOpen(false)}>
-          <div className="modal-card" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-card" style={{ maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setIsOfferModalOpen(false)} aria-label="Close modal">
               <X size={18} />
             </button>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(6, 69, 45, 0.1)', color: 'var(--deep-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Gift size={22} />
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: offerFormData.track === 'track2' ? 'rgba(165, 38, 42, 0.1)' : 'rgba(6, 69, 45, 0.1)', color: offerFormData.track === 'track2' ? 'var(--brand-red)' : 'var(--deep-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {offerFormData.track === 'track2' ? <Ticket size={22} /> : <Gift size={22} />}
               </div>
               <div>
                 <h3 style={{ fontSize: '20px', color: 'var(--deep-green)', margin: 0 }}>
                   {offerFormData.id ? 'Edit Loyalty Offer' : 'Add New Loyalty Offer'}
                 </h3>
                 <p style={{ fontSize: '13px', color: 'var(--muted-grey)', margin: '2px 0 0 0' }}>
-                  Manage reward item in the 5-visit milestone pool
+                  {offerFormData.track === 'track2' ? 'Track 2: Big Bill Reward (Single Bill ≥ ₹1,999)' : 'Track 1: Five-Visit Milestone Pool'}
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleSaveOffer}>
+              {/* Track Selector */}
               <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label" style={{ marginBottom: '6px' }}>Offer Name</label>
+                <label className="form-label" style={{ marginBottom: '6px' }}>Loyalty Track</label>
+                <select
+                  className="form-input"
+                  value={offerFormData.track || 'track1'}
+                  onChange={e => setOfferFormData({ ...offerFormData, track: e.target.value })}
+                  style={{ fontWeight: '700' }}
+                >
+                  <option value="track1">Track 1 — Five-Visit Milestone (Qualifying bills &lt; ₹1,999)</option>
+                  <option value="track2">Track 2 — Big Bill Rewards (Single verified bill ≥ ₹1,999)</option>
+                </select>
+                <span style={{ fontSize: '11.5px', color: 'var(--muted-grey)', marginTop: '4px', display: 'block' }}>
+                  {offerFormData.track === 'track2' 
+                    ? 'Big Bill track: 1 claim per customer per day, requires physical bill presentation.'
+                    : 'Milestone track: Customer completes 5 visits with cumulative cycle spend ≥ ₹2,000.'}
+                </span>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ marginBottom: '6px' }}>Offer Name / Title</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. 10% OFF, 15% OFF, FREE DESSERT, FREE COOL DRINK"
+                  placeholder={offerFormData.track === 'track2' ? 'e.g. 10% Big Bill Discount, 50% OFF, Chicken Biryani' : 'e.g. 10% OFF, FREE DESSERT'}
                   value={offerFormData.name}
                   onChange={e => setOfferFormData({ ...offerFormData, name: e.target.value })}
                   required
@@ -2854,21 +3138,30 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                     onChange={e => setOfferFormData({ ...offerFormData, type: e.target.value })}
                   >
                     <option value="percentage_discount">Percentage Discount</option>
-                    <option value="free_item">Free Item</option>
+                    <option value="free_item">Free Item / Dish</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" style={{ marginBottom: '6px' }}>Validity (Days)</label>
+                  <label className="form-label" style={{ marginBottom: '6px' }}>Allocation Percentage (%)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={offerFormData.expiry_days}
-                    onChange={e => setOfferFormData({ ...offerFormData, expiry_days: Number(e.target.value) })}
-                    min="1"
+                    placeholder="e.g. 25, 50, or 0"
+                    value={offerFormData.allocation_percentage}
+                    onChange={e => setOfferFormData({ ...offerFormData, allocation_percentage: e.target.value })}
+                    min="0"
+                    max="100"
+                    step="any"
                     required
                   />
                 </div>
+              </div>
+
+              <div style={{ marginBottom: '14px', marginTop: '-8px' }}>
+                <span style={{ fontSize: '11.5px', color: 'var(--muted-grey)', display: 'block' }}>
+                  Weighted probability among active offers in this track. <strong>0% offers will never be issued.</strong> Active offers in this track must total exactly 100%.
+                </span>
               </div>
 
               {offerFormData.type === 'percentage_discount' ? (
@@ -2892,7 +3185,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                     <input
                       type="number"
                       className="form-input"
-                      placeholder="e.g. 300"
+                      placeholder="e.g. 300 or 500"
                       value={offerFormData.max_discount}
                       onChange={e => setOfferFormData({ ...offerFormData, max_discount: Number(e.target.value) })}
                       min="0"
@@ -2906,13 +3199,27 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Complimentary Apricot Delight or Double Ka Meetha"
+                    placeholder="e.g. Complimentary Chicken Mandi or Double Ka Meetha"
                     value={offerFormData.description}
                     onChange={e => setOfferFormData({ ...offerFormData, description: e.target.value })}
                     required
                   />
                 </div>
               )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '14px', marginBottom: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ marginBottom: '6px' }}>Voucher Validity (Days)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={offerFormData.expiry_days}
+                    onChange={e => setOfferFormData({ ...offerFormData, expiry_days: Number(e.target.value) })}
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
 
               <div className="form-group" style={{ marginBottom: '22px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
@@ -2923,7 +3230,7 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
                     style={{ width: '18px', height: '18px', accentColor: 'var(--bright-green)' }}
                   />
                   <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--ink)' }}>
-                    Active (Eligible for random selection when customer hits 5/5 visits)
+                    Active (Include in weighted selection pool for this track)
                   </span>
                 </label>
               </div>

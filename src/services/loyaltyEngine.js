@@ -51,45 +51,86 @@ export function generateVoucherCode(prefix = 'DD-RW') {
 export const INITIAL_REWARD_OFFERS = [
   {
     id: 'offer_10_pct',
+    track: 'track1',
     name: '10% OFF',
+    title: '10% OFF',
     type: 'percentage_discount',
+    discount_type: 'percentage_discount',
     discount_percent: 10,
     max_discount: 300,
+    allocation_percentage: 25,
     description: '10% instant discount on your entire dining bill (Max ₹300).',
     is_active: true,
+    active: true,
+    is_deleted: false,
     expiry_days: 30,
     created_at: new Date().toISOString()
   },
   {
     id: 'offer_15_pct',
+    track: 'track1',
     name: '15% OFF',
+    title: '15% OFF',
     type: 'percentage_discount',
+    discount_type: 'percentage_discount',
     discount_percent: 15,
     max_discount: 400,
+    allocation_percentage: 25,
     description: '15% instant discount on your family dining bill (Max ₹400).',
     is_active: true,
+    active: true,
+    is_deleted: false,
     expiry_days: 30,
     created_at: new Date().toISOString()
   },
   {
     id: 'offer_free_dessert',
+    track: 'track1',
     name: 'FREE DESSERT',
+    title: 'FREE DESSERT',
     type: 'free_item',
+    discount_type: 'free_item',
     discount_percent: null,
     max_discount: null,
+    allocation_percentage: 25,
     description: 'Complimentary Double Ka Meetha or Apricot Delight with your meal.',
     is_active: true,
+    active: true,
+    is_deleted: false,
     expiry_days: 30,
     created_at: new Date().toISOString()
   },
   {
     id: 'offer_free_cooldrink',
+    track: 'track1',
     name: 'FREE COOL DRINK',
+    title: 'FREE COOL DRINK',
     type: 'free_item',
+    discount_type: 'free_item',
     discount_percent: null,
     max_discount: null,
+    allocation_percentage: 25,
     description: 'Complimentary chilled Goli Soda or refreshing beverage.',
     is_active: true,
+    active: true,
+    is_deleted: false,
+    expiry_days: 30,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'offer_bb_10',
+    track: 'track2',
+    name: '10% Big Bill Discount',
+    title: '10% Big Bill Discount',
+    type: 'percentage_discount',
+    discount_type: 'percentage_discount',
+    discount_percent: 10,
+    max_discount: 500,
+    allocation_percentage: 100,
+    description: '10% instant discount on your next visit (Max ₹500). Please show your original ₹1,999+ bill at counter.',
+    is_active: true,
+    active: true,
+    is_deleted: false,
     expiry_days: 30,
     created_at: new Date().toISOString()
   }
@@ -128,8 +169,16 @@ export class LoyaltyEngine {
   // =========================================================================
   // ADMIN REWARD POOL (OFFERS)
   // =========================================================================
-  getOffers() {
-    return this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS);
+  // =========================================================================
+  // ADMIN REWARD POOL (OFFERS - TRACK 1 & TRACK 2)
+  // =========================================================================
+  getOffers(track = null) {
+    const rawOffers = this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS);
+    const nonDeleted = rawOffers.filter(o => !o.is_deleted);
+    if (track) {
+      return nonDeleted.filter(o => (o.track || 'track1') === track);
+    }
+    return nonDeleted;
   }
 
   saveOffers(offers) {
@@ -137,73 +186,173 @@ export class LoyaltyEngine {
     return offers;
   }
 
-  addOffer({ name, type, discount_percent, max_discount, description, expiry_days = 30 }) {
-    const offers = this.getOffers();
+  addOffer({ 
+    track = 'track1', 
+    name, 
+    title, 
+    type, 
+    discount_percent, 
+    max_discount, 
+    description, 
+    allocation_percentage = 0, 
+    expiry_days = 30 
+  }) {
+    const rawOffers = this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS);
+    const offerTitle = (title || name || '').trim();
     const newOffer = {
       id: 'offer_' + Date.now(),
-      name: name.trim(),
+      track: track === 'track2' ? 'track2' : 'track1',
+      name: offerTitle,
+      title: offerTitle,
       type: type || 'percentage_discount',
-      discount_percent: discount_percent ? Number(discount_percent) : null,
-      max_discount: max_discount ? Number(max_discount) : null,
-      description: description ? description.trim() : `${name} special reward`,
+      discount_type: type === 'percentage_discount' ? 'percentage_discount' : (type || 'percentage_discount'),
+      discount_percent: discount_percent !== undefined && discount_percent !== null ? Number(discount_percent) : null,
+      max_discount: max_discount !== undefined && max_discount !== null ? Number(max_discount) : null,
+      description: description ? description.trim() : `${offerTitle} special reward`,
+      allocation_percentage: Number(allocation_percentage) || 0,
       is_active: true,
+      active: true,
+      is_deleted: false,
       expiry_days: Number(expiry_days) || 30,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    offers.push(newOffer);
-    this.saveOffers(offers);
+    rawOffers.push(newOffer);
+    this.saveOffers(rawOffers);
     return newOffer;
   }
 
   updateOffer(id, updates) {
-    const offers = this.getOffers().map(o => {
+    const rawOffers = this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS).map(o => {
       if (o.id === id) {
-        return { ...o, ...updates, updated_at: new Date().toISOString() };
+        return { 
+          ...o, 
+          ...updates, 
+          name: updates.title || updates.name || o.name,
+          title: updates.title || updates.name || o.title,
+          updated_at: new Date().toISOString() 
+        };
       }
       return o;
     });
-    this.saveOffers(offers);
-    return offers;
+    this.saveOffers(rawOffers);
+    return this.getOffers();
   }
 
   toggleOfferActive(id) {
-    const offers = this.getOffers().map(o => {
+    const rawOffers = this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS).map(o => {
       if (o.id === id) {
-        return { ...o, is_active: !o.is_active, updated_at: new Date().toISOString() };
+        const nextActive = !(o.is_active ?? o.active);
+        return { 
+          ...o, 
+          is_active: nextActive, 
+          active: nextActive, 
+          updated_at: new Date().toISOString() 
+        };
       }
       return o;
     });
-    this.saveOffers(offers);
-    return offers;
+    this.saveOffers(rawOffers);
+    return this.getOffers();
   }
 
   deleteOffer(id) {
-    const offers = this.getOffers().filter(o => o.id !== id);
-    this.saveOffers(offers);
-    return offers;
+    // Soft-delete to preserve foreign key & historical integrity
+    const rawOffers = this.storage.get('dd_loyalty_offers', INITIAL_REWARD_OFFERS).map(o => {
+      if (o.id === id) {
+        return { 
+          ...o, 
+          is_deleted: true, 
+          is_active: false, 
+          active: false, 
+          updated_at: new Date().toISOString() 
+        };
+      }
+      return o;
+    });
+    this.saveOffers(rawOffers);
+    return this.getOffers();
+  }
+
+  validateTrackAllocation(track = 'track1') {
+    const trackLabel = track === 'track1' ? 'Track 1 (Five-Visit Milestone)' : 'Track 2 (Big Bill)';
+    const activeOffers = this.getOffers(track).filter(o => (o.is_active ?? o.active) && !o.is_deleted);
+
+    if (activeOffers.length === 0) {
+      return {
+        isValid: false,
+        totalPercentage: 0,
+        activeCount: 0,
+        error: `No active offers configured for ${trackLabel}.`
+      };
+    }
+
+    let total = 0;
+    for (const offer of activeOffers) {
+      const pct = Number(offer.allocation_percentage);
+      if (isNaN(pct) || pct < 0 || pct > 100) {
+        return {
+          isValid: false,
+          totalPercentage: total,
+          activeCount: activeOffers.length,
+          error: `Offer "${offer.name || offer.title}" has invalid percentage: ${offer.allocation_percentage}. Must be between 0 and 100.`
+        };
+      }
+      total += pct;
+    }
+
+    const rounded = Math.round(total * 100) / 100;
+    const isValid = Math.abs(rounded - 100) < 0.001;
+    return {
+      isValid,
+      totalPercentage: rounded,
+      activeCount: activeOffers.length,
+      error: isValid ? null : `Total active allocation for ${trackLabel} is ${rounded}%. Active offers must total exactly 100%.`
+    };
+  }
+
+  selectWeightedOffer(track = 'track1') {
+    const validation = this.validateTrackAllocation(track);
+    if (!validation.isValid) {
+      console.warn(`[LOYALTY] Cannot select reward for ${track}: ${validation.error}`);
+      return null;
+    }
+
+    const activeOffers = this.getOffers(track).filter(o => (o.is_active ?? o.active) && !o.is_deleted);
+    // 0% offers must NEVER be selected
+    const eligibleOffers = activeOffers.filter(o => Number(o.allocation_percentage) > 0);
+    if (eligibleOffers.length === 0) return null;
+
+    const rand = Math.random() * 100;
+    let cumulative = 0;
+    for (const offer of eligibleOffers) {
+      cumulative += Number(offer.allocation_percentage);
+      if (rand < cumulative) {
+        return { ...offer };
+      }
+    }
+    return { ...eligibleOffers[eligibleOffers.length - 1] };
   }
 
   // =========================================================================
   // RANDOM SELECTION LOGIC & SNAPSHOT PERSISTENCE
   // =========================================================================
   /**
-   * Randomly selects one currently ACTIVE offer from the pool with equal probability.
+   * Selects an active Track 1 offer using admin-configured weighted percentages.
    * Creates an immutable snapshot so historical rewards NEVER change when Admin edits offers.
    */
   assignRandomMilestoneReward(customer) {
-    const offers = this.getOffers();
-    const activeOffers = offers.filter(o => o.is_active);
+    const selectedOffer = this.selectWeightedOffer('track1');
 
-    // Rule 8: If no active offers exist, create PENDING_REWARD
-    if (activeOffers.length === 0) {
+    // If configuration is invalid or missing, fail safely
+    if (!selectedOffer) {
       const pendingReward = {
         id: generateVoucherCode('DD-RW'),
         code: generateVoucherCode('DD-RW'),
         isPendingConfig: true,
         rewardName: 'Pending Admin Configuration',
         rewardType: 'pending_admin',
-        rewardDescription: 'Your visit milestone has been reached. Your reward is pending admin configuration.',
+        rewardDescription: 'Your visit milestone has been reached. Allocation configuration requires admin setup.',
         customerId: customer.id,
         customerName: customer.name || 'Valued Customer',
         assignedAt: new Date().toISOString(),
@@ -215,22 +364,18 @@ export class LoyaltyEngine {
       return pendingReward;
     }
 
-    // Rule 9: Random selection from active offer pool (equal probability)
-    const randomIndex = Math.floor(Math.random() * activeOffers.length);
-    const selectedOffer = activeOffers[randomIndex];
-
     // Calculate expiry date
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + (selectedOffer.expiry_days || 30));
     const expiryDateStr = expiry.toISOString().split('T')[0];
 
-    // Rule 6 & 32: Immutable Snapshot
+    // Immutable Snapshot
     const snapshotReward = {
       id: generateVoucherCode('DD-RW'),
       code: generateVoucherCode('DD-RW'),
       offerId: selectedOffer.id,
-      rewardName: selectedOffer.name,
-      rewardType: selectedOffer.type,
+      rewardName: selectedOffer.name || selectedOffer.title,
+      rewardType: selectedOffer.type || selectedOffer.discount_type,
       rewardValue: selectedOffer.discount_percent || null,
       maxDiscount: selectedOffer.max_discount || null,
       rewardDescription: selectedOffer.description,
@@ -264,9 +409,9 @@ export class LoyaltyEngine {
   getConfig() {
     const bigBill = this.getBigBillConfig();
     return {
-      track1Threshold: 2000,
+      track1Threshold: 1999,
       track1RequiredVisits: 5,
-      track2Threshold: 2000,
+      track2Threshold: 1999,
       track2DiscountPercent: bigBill.discount_percent || 10,
       track2MaxDiscount: bigBill.max_discount || 300,
       timezone: 'Asia/Kolkata'
@@ -285,20 +430,29 @@ export class LoyaltyEngine {
   }
 
   generateBigBillCoupon(customer, billData = {}) {
-    const cfg = this.getBigBillConfig();
+    const selectedOffer = this.selectWeightedOffer('track2');
+    if (!selectedOffer) {
+      console.warn('[LOYALTY] Track 2 Big Bill reward configuration invalid; cannot issue coupon.');
+      return null;
+    }
+
+    const expiryDays = Number(selectedOffer.expiry_days) || 30;
     const expiry = new Date();
-    expiry.setDate(expiry.getDate() + (cfg.expiry_days || 14));
+    expiry.setDate(expiry.getDate() + expiryDays);
 
     const coupon = {
-      id: generateVoucherCode('DD-BB'),
-      code: generateVoucherCode('DD-BB'),
+      id: generateVoucherCode('DD-BIG'),
+      code: generateVoucherCode('DD-BIG'),
       customerId: customer.id,
       customerName: customer.name || 'Valued Customer',
       billNumber: billData.billNumber || null,
       billAmount: billData.originalAmount || null,
-      discountPercent: cfg.discount_percent,
-      maxDiscount: cfg.max_discount,
-      description: `${cfg.discount_percent}% instant discount on family dining (Max ₹${cfg.max_discount}).`,
+      rewardType: selectedOffer.discount_type || selectedOffer.type || 'percentage_discount',
+      rewardName: selectedOffer.title || selectedOffer.name || 'Big Bill Reward',
+      discountPercent: selectedOffer.discount_percent !== null && selectedOffer.discount_percent !== undefined ? Number(selectedOffer.discount_percent) : null,
+      maxDiscount: selectedOffer.max_discount !== null && selectedOffer.max_discount !== undefined ? Number(selectedOffer.max_discount) : null,
+      description: selectedOffer.description || `${selectedOffer.title || 'Big Bill Reward'} on your next dining visit. Show original physical bill at counter.`,
+      counterVerificationNotice: 'Please show your original ₹1,999+ bill at the counter to redeem this offer.',
       issuedDate: getKolkataDateString(),
       assignedAt: new Date().toISOString(),
       expiryDate: expiry.toISOString().split('T')[0],
@@ -456,8 +610,8 @@ export class LoyaltyEngine {
     }
 
     // 4. Category Determination by ORIGINAL GRAND TOTAL (Rule 23 & 24)
-    // < ₹2,000 is Visit Reward; ≥ ₹2,000 is Big Bill Reward
-    const isVisitReward = amount < 2000;
+    // < ₹1,999 is Visit Reward (Track 1); ≥ ₹1,999 is Big Bill Reward (Track 2)
+    const isVisitReward = amount < 1999;
     const category = isVisitReward ? 'VISIT REWARDS' : 'BIG BILL REWARDS';
 
     // 5. Same-Day Daily Limits (Rule 11)
@@ -469,7 +623,7 @@ export class LoyaltyEngine {
     );
 
     if (isVisitReward) {
-      const alreadyHadVisitClaimToday = approvedToday.some(c => Number(c.originalAmount) < 2000);
+      const alreadyHadVisitClaimToday = approvedToday.some(c => Number(c.originalAmount) < 1999);
       if (alreadyHadVisitClaimToday) {
         return {
           success: false,
@@ -478,7 +632,7 @@ export class LoyaltyEngine {
         };
       }
     } else {
-      const alreadyHadBigBillClaimToday = approvedToday.some(c => Number(c.originalAmount) >= 2000);
+      const alreadyHadBigBillClaimToday = approvedToday.some(c => Number(c.originalAmount) >= 1999);
       if (alreadyHadBigBillClaimToday) {
         return {
           success: false,

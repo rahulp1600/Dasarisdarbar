@@ -1,6 +1,6 @@
 import express from 'express';
 import { supabase, readLocalStore, writeLocalStore } from '../services/supabaseClient.js';
-import { redeemVoucher } from '../services/loyaltyEngine.js';
+import { redeemVoucher, validateTrackAllocation, getActiveRewardOffers } from '../services/loyaltyEngine.js';
 import { 
   getDailySequenceConfig, 
   setDailySequenceConfig, 
@@ -322,9 +322,10 @@ router.post('/daily-sequence', async (req, res) => {
 
 /**
  * GET /api/admin/offers
- * Retrieves loyalty offers list
+ * Retrieves loyalty offers list with track validation statuses
  */
 router.get('/offers', async (req, res) => {
+  let offers = [];
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -333,25 +334,51 @@ router.get('/offers', async (req, res) => {
         .order('id', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        return res.json({ success: true, data });
+        offers = data.filter(o => !o.is_deleted);
       }
     } catch (e) {
       console.warn('Supabase offers query fallback:', e.message);
     }
   }
 
-  const store = readLocalStore();
-  return res.json({ success: true, data: store.loyalty_offers || [] });
+  if (offers.length === 0) {
+    const store = readLocalStore();
+    offers = (store.loyalty_offers || []).filter(o => !o.is_deleted);
+  }
+
+  const track1_status = await validateTrackAllocation('track1');
+  const track2_status = await validateTrackAllocation('track2');
+
+  return res.json({ 
+    success: true, 
+    data: offers,
+    track1_status,
+    track2_status
+  });
 });
 
 /**
  * POST /api/admin/offers
- * Admin updates or creates a loyalty offer
+ * Admin updates or creates a loyalty offer for Track 1 or Track 2
  */
 router.post('/offers', async (req, res) => {
   const offer = req.body;
   if (!offer || !offer.title) {
     return res.status(400).json({ success: false, message: 'Offer title is required.' });
+  }
+
+  const track = offer.track === 'track2' ? 'track2' : 'track1';
+
+  let allocationPercentage = 0;
+  if (offer.allocation_percentage !== undefined && offer.allocation_percentage !== null && offer.allocation_percentage !== '') {
+    const num = Number(offer.allocation_percentage);
+    if (isNaN(num) || num < 0 || num > 100) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Allocation percentage must be a numeric value between 0 and 100.' 
+      });
+    }
+    allocationPercentage = Math.round(num * 100) / 100;
   }
 
   if (offer.discount_percent !== undefined && offer.discount_percent !== null && offer.discount_percent !== '') {
@@ -363,16 +390,24 @@ router.post('/offers', async (req, res) => {
 
   const store = readLocalStore();
   const offerId = offer.id || `offer_${Date.now()}`;
+  
+  // Find existing offer to preserve non-overwritten fields
+  const existingOffer = (store.loyalty_offers || []).find(o => o.id === offerId);
+
   const offerPayload = {
     id: offerId,
+    track,
     title: offer.title,
-    discount_type: offer.discount_type || 'percentage_discount',
+    discount_type: offer.discount_type || (offer.type === 'percentage_discount' ? 'percentage_discount' : (offer.type || 'percentage_discount')),
     value: offer.value || (offer.discount_percent ? `${offer.discount_percent}%` : 'Special'),
-    discount_percent: offer.discount_percent ? Number(offer.discount_percent) : null,
-    max_discount: offer.max_discount ? Number(offer.max_discount) : null,
+    discount_percent: offer.discount_percent !== undefined && offer.discount_percent !== null ? Number(offer.discount_percent) : null,
+    max_discount: offer.max_discount !== undefined && offer.max_discount !== null ? Number(offer.max_discount) : null,
     description: offer.description || '',
-    active: offer.active !== false,
-    expiry_days: Number(offer.expiry_days) || 30
+    active: offer.active !== undefined ? Boolean(offer.active) : (offer.is_active !== undefined ? Boolean(offer.is_active) : true),
+    allocation_percentage: allocationPercentage,
+    is_deleted: false,
+    expiry_days: Number(offer.expiry_days) || 30,
+    created_at: existingOffer?.created_at || new Date().toISOString()
   };
 
   if (supabase) {
@@ -400,7 +435,13 @@ router.post('/offers', async (req, res) => {
     details: offerPayload
   });
 
-  return res.json({ success: true, offer: offerPayload });
+  const trackStatus = await validateTrackAllocation(track);
+
+  return res.json({ 
+    success: true, 
+    offer: offerPayload,
+    trackStatus
+  });
 });
 
 /**
@@ -412,6 +453,11 @@ router.patch('/offers/:id/status', async (req, res) => {
   const { active } = req.body || {};
   const isActive = Boolean(active);
   let updatedInSupabase = false;
+
+  const store = readLocalStore();
+  if (!store.loyalty_offers) store.loyalty_offers = [];
+  const existing = store.loyalty_offers.find(o => o.id === id);
+  const track = existing?.track || 'track1';
 
   if (supabase) {
     try {
@@ -426,8 +472,6 @@ router.patch('/offers/:id/status', async (req, res) => {
     }
   }
 
-  const store = readLocalStore();
-  if (!store.loyalty_offers) store.loyalty_offers = [];
   const idx = store.loyalty_offers.findIndex(o => o.id === id);
   if (idx >= 0) {
     store.loyalty_offers[idx].active = isActive;
@@ -439,48 +483,163 @@ router.patch('/offers/:id/status', async (req, res) => {
     actorId: req.adminUser,
     targetRecordType: 'loyalty_offers',
     targetRecordId: id,
-    details: { active: isActive, updatedInSupabase }
+    details: { active: isActive, updatedInSupabase, track }
   });
+
+  const trackStatus = await validateTrackAllocation(track);
 
   return res.json({
     success: true,
     id,
     active: isActive,
-    offer: { id, active: isActive },
+    offer: { id, active: isActive, track },
+    trackStatus,
     message: `Offer ${isActive ? 'activated' : 'deactivated'} successfully.`
   });
 });
 
 /**
  * DELETE /api/admin/offers/:id
- * Admin deletes a loyalty offer
+ * Admin safely archives/soft-deletes a loyalty offer.
+ * History, vouchers, and previous customer rewards are NEVER destroyed.
  */
 router.delete('/offers/:id', async (req, res) => {
   const { id } = req.params;
 
+  const store = readLocalStore();
+  const existing = (store.loyalty_offers || []).find(o => o.id === id);
+  const track = existing?.track || 'track1';
+
   if (supabase) {
     try {
-      await supabase.from('loyalty_offers').delete().eq('id', id);
+      // Soft-delete to preserve historical integrity and foreign keys
+      await supabase
+        .from('loyalty_offers')
+        .update({ is_deleted: true, active: false })
+        .eq('id', id);
     } catch (e) {
-      console.warn('Supabase offer delete fallback:', e.message);
+      console.warn('Supabase offer soft-delete fallback:', e.message);
     }
   }
 
-  const store = readLocalStore();
   if (store.loyalty_offers) {
-    store.loyalty_offers = store.loyalty_offers.filter(o => o.id !== id);
-    writeLocalStore(store);
+    const idx = store.loyalty_offers.findIndex(o => o.id === id);
+    if (idx >= 0) {
+      store.loyalty_offers[idx].is_deleted = true;
+      store.loyalty_offers[idx].active = false;
+      writeLocalStore(store);
+    }
   }
 
   await logAuditEvent({
-    actionType: 'LOYALTY_OFFER_DELETED',
+    actionType: 'LOYALTY_OFFER_ARCHIVED',
     actorId: req.adminUser,
     targetRecordType: 'loyalty_offers',
     targetRecordId: id,
-    details: { offerId: id }
+    details: { offerId: id, track, action: 'soft_delete' }
   });
 
-  return res.json({ success: true, message: 'Offer deleted successfully.' });
+  const trackStatus = await validateTrackAllocation(track);
+
+  return res.json({ 
+    success: true, 
+    message: 'Offer deleted/archived safely. Historical rewards and issued vouchers remain preserved.',
+    trackStatus
+  });
+});
+
+/**
+ * PUT /api/admin/offers/allocations/:track
+ * Bulk updates allocation percentages for all active offers in a track.
+ * Enforces strict 100% total validation before persisting.
+ */
+router.put('/offers/allocations/:track', async (req, res) => {
+  const track = req.params.track === 'track2' ? 'track2' : 'track1';
+  const { allocations } = req.body || {};
+
+  if (!allocations || (typeof allocations !== 'object')) {
+    return res.status(400).json({
+      success: false,
+      message: 'Allocations payload must be provided as an object mapping offer IDs to percentages or an array of { id, allocation_percentage }.'
+    });
+  }
+
+  const store = readLocalStore();
+  const trackOffers = (store.loyalty_offers || []).filter(o => (o.track || 'track1') === track && !o.is_deleted);
+
+  // Normalize incoming allocations map: { [id]: number }
+  const allocMap = {};
+  if (Array.isArray(allocations)) {
+    for (const item of allocations) {
+      if (item && item.id) {
+        allocMap[item.id] = Number(item.allocation_percentage);
+      }
+    }
+  } else {
+    for (const [id, val] of Object.entries(allocations)) {
+      allocMap[id] = Number(val);
+    }
+  }
+
+  // Validate each percentage and compute active total
+  let activeTotal = 0;
+  for (const offer of trackOffers) {
+    const newPct = allocMap[offer.id] !== undefined ? allocMap[offer.id] : Number(offer.allocation_percentage || 0);
+    if (isNaN(newPct) || newPct < 0 || newPct > 100) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid allocation percentage for "${offer.title || offer.name}": must be a number between 0 and 100.`
+      });
+    }
+
+    if (offer.active !== false) {
+      activeTotal += newPct;
+    }
+  }
+
+  const roundedTotal = Math.round(activeTotal * 100) / 100;
+  if (Math.abs(roundedTotal - 100) > 0.001) {
+    return res.status(400).json({
+      success: false,
+      message: `Active allocation percentages for ${track === 'track1' ? 'Track 1' : 'Track 2'} must total exactly 100%. Current total: ${roundedTotal}%.`
+    });
+  }
+
+  // Persist changes
+  for (const offer of trackOffers) {
+    if (allocMap[offer.id] !== undefined) {
+      const updatedPct = Math.round(allocMap[offer.id] * 100) / 100;
+      offer.allocation_percentage = updatedPct;
+
+      if (supabase) {
+        try {
+          await supabase
+            .from('loyalty_offers')
+            .update({ allocation_percentage: updatedPct })
+            .eq('id', offer.id);
+        } catch (e) {
+          console.warn(`Supabase allocation update fallback for ${offer.id}:`, e.message);
+        }
+      }
+    }
+  }
+
+  writeLocalStore(store);
+
+  await logAuditEvent({
+    actionType: 'LOYALTY_ALLOCATIONS_UPDATED',
+    actorId: req.adminUser,
+    targetRecordType: 'loyalty_offers',
+    details: { track, allocations: allocMap, total: roundedTotal }
+  });
+
+  const trackStatus = await validateTrackAllocation(track);
+
+  return res.json({
+    success: true,
+    message: `Allocation percentages for ${track === 'track1' ? 'Track 1' : 'Track 2'} updated successfully. Total: 100%.`,
+    trackStatus
+  });
 });
 
 /**

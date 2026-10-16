@@ -4,7 +4,7 @@
 // ZERO PLAINTEXT CREDENTIALS STORED IN FRONTEND
 // ============================================================================
 
-import backendApi from './backendApi';
+import backendApi from './backendApi.js';
 
 // Purge any legacy plaintext credentials left in browser localStorage
 if (typeof localStorage !== 'undefined') {

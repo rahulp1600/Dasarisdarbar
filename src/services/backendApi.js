@@ -7,7 +7,7 @@
 const BACKEND_URL = (
   typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://127.0.0.1:5001'
-    : (import.meta.env.VITE_BACKEND_URL || 'https://dasarisdarbar.onrender.com')
+    : ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || (typeof process !== 'undefined' && process.env?.VITE_BACKEND_URL) || 'https://dasarisdarbar.onrender.com')
 );
 
 let currentCsrfToken = null;
@@ -325,6 +325,18 @@ export const backendApi = {
       return await res.json();
     } catch (e) {
       return { success: false, message: 'Could not delete offer: ' + e.message };
+    }
+  },
+
+  async saveTrackAllocations(track, allocations) {
+    try {
+      const res = await adminFetch(`/api/admin/offers/allocations/${encodeURIComponent(track)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ allocations })
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: 'Could not update allocations: ' + e.message };
     }
   },
 
