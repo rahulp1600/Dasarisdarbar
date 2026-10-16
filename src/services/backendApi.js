@@ -347,8 +347,26 @@ export const backendApi = {
   async getAdminReservationOffers() {
     try {
       const res = await adminFetch('/api/admin/reservation-offers');
-      return res.ok ? await res.json() : { success: false, data: [] };
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+          return json;
+        }
+      }
+      // If admin endpoint returned empty or unauthenticated, check public offers endpoint
+      const pubRes = await fetch(`${BACKEND_URL}/api/reservation-offers`);
+      if (pubRes.ok) {
+        const pubData = await pubRes.json();
+        if (pubData && pubData.success && Array.isArray(pubData.data) && pubData.data.length > 0) {
+          return pubData;
+        }
+      }
+      return { success: false, data: [] };
     } catch (e) {
+      try {
+        const pubRes = await fetch(`${BACKEND_URL}/api/reservation-offers`);
+        if (pubRes.ok) return await pubRes.json();
+      } catch (err2) {}
       return { success: false, data: [] };
     }
   },

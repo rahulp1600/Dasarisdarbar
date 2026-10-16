@@ -54,8 +54,13 @@ export default function AdminDashboard({ activeTab: propActiveTab, setActiveTab:
         }
 
         if (resOffersRes.status === 'fulfilled' && resOffersRes.value && resOffersRes.value.success && Array.isArray(resOffersRes.value.data)) {
-          setReservationOffers(resOffersRes.value.data);
-          dataStore.saveReservationOffers(resOffersRes.value.data);
+          if (resOffersRes.value.data.length > 0) {
+            setReservationOffers(resOffersRes.value.data);
+            dataStore.saveReservationOffers(resOffersRes.value.data);
+          } else {
+            const fallback = dataStore.getReservationOffers();
+            setReservationOffers(fallback);
+          }
         }
       } catch (err) {
         console.warn('Admin dashboard data sync error:', err.message);

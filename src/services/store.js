@@ -363,7 +363,11 @@ export const localStoreManager = {
         created_at: '2026-10-01T00:00:00.000Z'
       }
     ];
-    return getStorage('dd_reservation_offers', initial);
+    const stored = getStorage('dd_reservation_offers', null);
+    if (!stored || !Array.isArray(stored) || stored.length === 0) {
+      return initial;
+    }
+    return stored;
   },
   saveReservationOffers: (offers) => setStorage('dd_reservation_offers', offers),
   getActiveReservationOffers: () => {
