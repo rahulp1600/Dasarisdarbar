@@ -85,6 +85,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       success: true,
       message: 'Login successful',
       username: session.adminUsername,
+      sessionToken: session.rawSessionToken,
       csrfToken: session.rawCsrfToken
     });
   } catch (err) {
@@ -212,6 +213,7 @@ router.post('/change-credentials', async (req, res) => {
       success: true,
       message: 'Admin credentials successfully updated.',
       username: newSession.adminUsername,
+      sessionToken: newSession.rawSessionToken,
       csrfToken: newSession.rawCsrfToken
     });
   } catch (err) {

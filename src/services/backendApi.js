@@ -10,14 +10,37 @@ const BACKEND_URL = (
     : ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || (typeof process !== 'undefined' && process.env?.VITE_BACKEND_URL) || 'https://dasarisdarbar.onrender.com')
 );
 
-let currentCsrfToken = null;
+let currentCsrfToken = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('dd_admin_csrf') : null);
+let currentSessionToken = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('dd_admin_session') : null);
 
 export function setCsrfToken(token) {
   currentCsrfToken = token;
+  if (typeof sessionStorage !== 'undefined') {
+    if (token) sessionStorage.setItem('dd_admin_csrf', token);
+    else sessionStorage.removeItem('dd_admin_csrf');
+  }
 }
 
 export function getCsrfToken() {
+  if (!currentCsrfToken && typeof sessionStorage !== 'undefined') {
+    currentCsrfToken = sessionStorage.getItem('dd_admin_csrf');
+  }
   return currentCsrfToken;
+}
+
+export function setSessionToken(token) {
+  currentSessionToken = token;
+  if (typeof sessionStorage !== 'undefined') {
+    if (token) sessionStorage.setItem('dd_admin_session', token);
+    else sessionStorage.removeItem('dd_admin_session');
+  }
+}
+
+export function getSessionToken() {
+  if (!currentSessionToken && typeof sessionStorage !== 'undefined') {
+    currentSessionToken = sessionStorage.getItem('dd_admin_session');
+  }
+  return currentSessionToken;
 }
 
 /**
@@ -25,9 +48,13 @@ export function getCsrfToken() {
  */
 async function adminFetch(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`;
+  const sessionToken = getSessionToken();
+  const csrfToken = getCsrfToken();
+
   const headers = {
     ...(options.headers || {}),
-    ...(currentCsrfToken ? { 'x-csrf-token': currentCsrfToken } : {})
+    ...(sessionToken ? { 'x-admin-session': sessionToken } : {}),
+    ...(csrfToken ? { 'x-csrf-token': csrfToken } : {})
   };
 
   if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
@@ -69,8 +96,9 @@ export const backendApi = {
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (data && data.success && data.csrfToken) {
-        setCsrfToken(data.csrfToken);
+      if (data && data.success) {
+        if (data.sessionToken) setSessionToken(data.sessionToken);
+        if (data.csrfToken) setCsrfToken(data.csrfToken);
       }
       return data;
     } catch (e) {
@@ -80,12 +108,16 @@ export const backendApi = {
 
   async checkAdminSession() {
     try {
+      const sessionToken = getSessionToken();
       const res = await fetch(`${BACKEND_URL}/api/admin/session`, {
+        headers: {
+          ...(sessionToken ? { 'x-admin-session': sessionToken } : {})
+        },
         credentials: 'include'
       });
       const data = await res.json();
-      if (data && data.authenticated && data.csrfToken) {
-        setCsrfToken(data.csrfToken);
+      if (data && data.authenticated) {
+        if (data.csrfToken) setCsrfToken(data.csrfToken);
       }
       return data;
     } catch (e) {
@@ -98,9 +130,11 @@ export const backendApi = {
       const res = await adminFetch('/api/admin/logout', {
         method: 'POST'
       });
+      setSessionToken(null);
       setCsrfToken(null);
       return await res.json();
     } catch (e) {
+      setSessionToken(null);
       setCsrfToken(null);
       return { success: true };
     }

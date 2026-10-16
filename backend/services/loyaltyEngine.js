@@ -43,7 +43,7 @@ export async function getCycleApprovedVisitClaims(customerId) {
   if (supabase && process.env.NODE_ENV !== 'test') {
     try {
       const [redRes, clmRes] = await Promise.all([
-        supabase.from('redemptions').select('*').eq('customer_id', customerId).eq('reward_type', 'milestone_reward').order('created_at', { ascending: false }).limit(1),
+        supabase.from('redemptions').select('*').eq('customer_id', customerId).eq('reward_type', 'milestone_reward').order('redeemed_at', { ascending: false }).limit(1),
         supabase.from('loyalty_claims').select('*').eq('customer_id', customerId).eq('status', 'approved').order('created_at', { ascending: false })
       ]);
       if (!redRes.error && redRes.data) redemptions = redRes.data;
