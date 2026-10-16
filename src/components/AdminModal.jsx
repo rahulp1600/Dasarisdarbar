@@ -40,7 +40,7 @@ export default function AdminModal({ isOpen, onClose, onLoginSuccess }) {
       }
     } catch (err) {
       setIsSubmitting(false);
-      setError('Connection error. Please try again.');
+      setError(err?.message || 'Login error. Please try again.');
     }
   };
 
